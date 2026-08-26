@@ -5,7 +5,7 @@ INSERT OR IGNORE INTO companies
 (company_id, company_name, domain, status)
 VALUES
 ('HRC', 'HR COMPANY', NULL, '有効'),
-('ITC', 'ITキャリアアップシステム', NULL, '有効');
+('GANBARU', '株式会社がんばる', NULL, '有効');
 
 INSERT OR IGNORE INTO work_patterns
 (work_pattern_id, company_id, display_name, start_time, end_time, break_minutes, display_order, is_active)
