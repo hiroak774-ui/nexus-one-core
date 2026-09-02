@@ -179,38 +179,76 @@
       const after = before
         .replace(/ITキャリアアップシステム/g, '株式会社がんばる')
         .replace(/ITキャリア/g, '株式会社がんばる')
-        .replace(/\bITC\b/g, 'GANBARU');
+        .replace(/\bITC\b/g, 'GANBARU')
+        .replace(/HR COMPANY(?!株式会社)/g, 'HR COMPANY株式会社');
       if (before !== after) node.nodeValue = after;
     });
+
+    doc.querySelectorAll('[data-id="ITC"], [data-company-id="ITC"], [data-value="ITC"]').forEach(el => {
+      if (el.dataset.id === 'ITC') el.dataset.id = 'GANBARU';
+      if (el.dataset.companyId === 'ITC') el.dataset.companyId = 'GANBARU';
+      if (el.dataset.value === 'ITC') el.dataset.value = 'GANBARU';
+    });
+
     const companyValue = doc.getElementById('companyValue');
-    if (companyValue?.dataset?.id === 'ITC') companyValue.dataset.id = 'GANBARU';
+    if (companyValue) {
+      if (companyValue.dataset?.id === 'ITC') companyValue.dataset.id = 'GANBARU';
+      if ((companyValue.textContent || '').trim() === 'HR COMPANY') companyValue.textContent = 'HR COMPANY株式会社';
+    }
   }
 
   function addAddressFields(doc) {
-    if (doc.getElementById('postalCodeInput')) return;
+    if (doc.getElementById('nexusAddressSection')) return;
     const emailInput = doc.getElementById('emailInput');
     const anchor = emailInput?.closest('.row');
     if (!anchor) return;
 
-    const make = (id, label, placeholder, autocomplete) => {
-      const row = doc.createElement('div');
-      row.className = 'row';
-      row.innerHTML = `<div class="meta" style="width:100%"><div class="label">${label}</div><input class="text-input" id="${id}" type="text" autocomplete="${autocomplete}" placeholder="${placeholder}"></div>`;
-      return row;
-    };
+    const style = doc.createElement('style');
+    style.id = 'nexusSetupFormStyle';
+    style.textContent = `
+      #nexusAddressSection{padding:14px 0 4px;border-top:1px solid rgba(148,163,184,.16);margin-top:4px}
+      #nexusAddressSection .nexus-address-note{margin:0 0 12px;padding:0 2px;color:rgba(96,165,250,.92);font-size:11px;line-height:1.65;font-weight:700}
+      #nexusAddressSection .nexus-address-grid{display:grid;grid-template-columns:1fr;gap:10px}
+      #nexusAddressSection .nexus-address-field{display:block;width:100%}
+      #nexusAddressSection .nexus-address-label{display:block;margin:0 0 6px;color:rgba(203,213,225,.72);font-size:10px;font-weight:800;letter-spacing:.08em}
+      #nexusAddressSection .nexus-address-input{box-sizing:border-box;display:block;width:100%;height:44px;padding:0 13px;border:1px solid rgba(148,163,184,.18);border-radius:12px;background:rgba(15,23,42,.45);color:#f8fafc;font:inherit;font-size:14px;font-weight:700;letter-spacing:.01em;outline:none;appearance:none;-webkit-appearance:none}
+      #nexusAddressSection .nexus-address-input::placeholder{color:rgba(148,163,184,.42);font-weight:600}
+      #nexusAddressSection .nexus-address-input:focus{border-color:rgba(56,189,248,.7);box-shadow:0 0 0 3px rgba(56,189,248,.10)}
+      #nexusAddressSection .nexus-address-half{display:grid;grid-template-columns:110px 1fr;gap:10px}
+      @media(max-width:420px){#nexusAddressSection .nexus-address-half{grid-template-columns:1fr}}
+    `;
+    doc.head.appendChild(style);
 
-    const frag = doc.createDocumentFragment();
-    const note = doc.createElement('div');
-    note.id = 'googleAddressNote';
-    note.style.cssText = 'padding:10px 18px 2px;color:rgba(96,165,250,.82);font-size:11px;line-height:1.6;font-weight:650;';
-    note.textContent = '現住所を入力してください。Googleに住所が登録されている場合は自動入力されます。';
-    frag.appendChild(note);
-    frag.appendChild(make('postalCodeInput','郵便番号','123-4567','postal-code'));
-    frag.appendChild(make('prefectureInput','都道府県','神奈川県','address-level1'));
-    frag.appendChild(make('cityAddressInput','市区町村','横浜市戸塚区','address-level2'));
-    frag.appendChild(make('streetAddressInput','番地','戸塚町1-2-3','address-line1'));
-    frag.appendChild(make('buildingInput','建物名・部屋番号','NEXUSレジデンス101','address-line2'));
-    anchor.after(frag);
+    const section = doc.createElement('section');
+    section.id = 'nexusAddressSection';
+    section.innerHTML = `
+      <p class="nexus-address-note" id="googleAddressNote">現住所を入力してください。Googleに住所が登録されている場合は自動入力されます。</p>
+      <div class="nexus-address-grid">
+        <div class="nexus-address-half">
+          <label class="nexus-address-field">
+            <span class="nexus-address-label">郵便番号</span>
+            <input class="nexus-address-input" id="postalCodeInput" type="text" autocomplete="postal-code" inputmode="numeric" placeholder="123-4567">
+          </label>
+          <label class="nexus-address-field">
+            <span class="nexus-address-label">都道府県</span>
+            <input class="nexus-address-input" id="prefectureInput" type="text" autocomplete="address-level1" placeholder="神奈川県">
+          </label>
+        </div>
+        <label class="nexus-address-field">
+          <span class="nexus-address-label">市区町村</span>
+          <input class="nexus-address-input" id="cityAddressInput" type="text" autocomplete="address-level2" placeholder="横浜市戸塚区">
+        </label>
+        <label class="nexus-address-field">
+          <span class="nexus-address-label">番地</span>
+          <input class="nexus-address-input" id="streetAddressInput" type="text" autocomplete="address-line1" placeholder="戸塚町1-2-3">
+        </label>
+        <label class="nexus-address-field">
+          <span class="nexus-address-label">建物名・部屋番号</span>
+          <input class="nexus-address-input" id="buildingInput" type="text" autocomplete="address-line2" placeholder="NEXUSレジデンス101">
+        </label>
+      </div>
+    `;
+    anchor.after(section);
 
     try {
       const address = JSON.parse(sessionStorage.getItem(ADDRESS_KEY) || 'null');
@@ -226,7 +264,8 @@
           const el = doc.getElementById(id);
           if (el && value) el.value = value;
         });
-        note.textContent = 'Googleアカウントの住所を自動入力しました。内容は編集できます。';
+        const note = doc.getElementById('googleAddressNote');
+        if (note) note.textContent = 'Googleアカウントの住所を自動入力しました。内容は編集できます。';
       }
     } catch (_) {}
   }
