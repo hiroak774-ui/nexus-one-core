@@ -47,10 +47,6 @@ export async function verifyGoogleAccessToken(accessToken, env) {
     throw new Error('Google token audience mismatch');
   }
 
-  if (tokenInfo.verified_email !== true && tokenInfo.verified_email !== 'true') {
-    throw new Error('Google email is not verified');
-  }
-
   const userInfoResponse = await fetch(USERINFO_URL, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -60,9 +56,14 @@ export async function verifyGoogleAccessToken(accessToken, env) {
   if (!userInfoResponse.ok) throw new Error('Failed to load Google profile');
   const userInfo = await userInfoResponse.json();
 
+  if (userInfo.email_verified !== true && userInfo.email_verified !== 'true') {
+    throw new Error('Google email is not verified');
+  }
+  if (!userInfo.email) throw new Error('Google email is unavailable');
+
   return {
     sub: userInfo.sub || tokenInfo.user_id || '',
-    email: userInfo.email || tokenInfo.email || '',
+    email: userInfo.email,
     name: userInfo.name || '',
     picture: userInfo.picture || '',
     scopes: tokenInfo.scope || ''
