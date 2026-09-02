@@ -10,14 +10,17 @@ export async function onRequest(context) {
   if (!contentType.includes('text/html')) return response;
 
   const html = await response.text();
-  if (html.includes('/nexus-auth-override.js')) return new Response(html, response);
+  const scripts = [];
+  if (!html.includes('/nexus-auth-override.js')) scripts.push('<script src="/nexus-auth-override.js"></script>');
+  if (!html.includes('/nexus-route-guard.js')) scripts.push('<script src="/nexus-route-guard.js"></script>');
 
-  const script = '<script src="/nexus-auth-override.js"></script>';
+  if (!scripts.length) return new Response(html, response);
+
   const lower = html.toLowerCase();
   const bodyIndex = lower.lastIndexOf('</body>');
   const injected = bodyIndex >= 0
-    ? html.slice(0, bodyIndex) + script + html.slice(bodyIndex)
-    : html + script;
+    ? html.slice(0, bodyIndex) + scripts.join('') + html.slice(bodyIndex)
+    : html + scripts.join('');
 
   const headers = new Headers(response.headers);
   headers.delete('content-length');
