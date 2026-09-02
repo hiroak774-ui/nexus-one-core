@@ -70,10 +70,16 @@ export async function onRequest(context) {
   let html = await response.text();
   html = sanitizeLegacyStaffShell(html);
 
-  const scriptTag = '<script src="/nexus-auth-client.js"></script>';
   const scripts = [];
-  if (!html.includes('/nexus-auth-client.js')) scripts.push(scriptTag);
-  if (!html.includes('nexusSetupScrollBound')) scripts.push(SETUP_SCROLL_FIX);
+  if (!html.includes('/nexus-auth-client.js')) {
+    scripts.push('<script src="/nexus-auth-client.js"></script>');
+  }
+  if (!html.includes('/nexus-staff-profile.js')) {
+    scripts.push('<script src="/nexus-staff-profile.js"></script>');
+  }
+  if (!html.includes('nexusSetupScrollBound')) {
+    scripts.push(SETUP_SCROLL_FIX);
+  }
 
   if (scripts.length) {
     const lower = html.toLowerCase();
