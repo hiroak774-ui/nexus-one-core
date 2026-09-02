@@ -14,9 +14,14 @@ async function loadApprovedEmployee(db, googleSub) {
   `).bind(googleSub).first();
 }
 
-function weekdayJa(dateText) {
+function weekdayInfo(dateText) {
   const d = new Date(`${dateText}T00:00:00+09:00`);
-  return ['日','月','火','水','木','金','土'][d.getDay()];
+  const day = d.getDay();
+  return {
+    label: ['日','月','火','水','木','金','土'][day],
+    isSunday: day === 0,
+    isSaturday: day === 6
+  };
 }
 
 function hhmm(value) {
@@ -25,9 +30,16 @@ function hhmm(value) {
   return match ? `${match[1]}:${match[2]}` : String(value);
 }
 
-function formatMinutes(minutes) {
+function workText(minutes) {
   const total = Number(minutes || 0);
   if (!total) return '';
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+function totalWorkText(minutes) {
+  const total = Number(minutes || 0);
   const h = Math.floor(total / 60);
   const m = total % 60;
   return m ? `${h}h ${m}m` : `${h}h`;
@@ -77,33 +89,61 @@ export async function onRequestGet({ request, env }) {
       ORDER BY work_date ASC
     `).bind(employee.employee_id, monthKey).all();
 
-    const records = (result.results || []).map(row => ({
-      attendanceId: row.attendance_id,
-      date: row.work_date,
-      weekday: weekdayJa(row.work_date),
-      workType: row.work_type || '',
-      workStyle: row.work_style || '',
-      workPatternId: row.work_pattern_id || '',
-      workPatternName: row.work_pattern_name || '',
-      scheduledStartTime: hhmm(row.scheduled_start_time),
-      scheduledEndTime: hhmm(row.scheduled_end_time),
-      breakMinutes: row.break_minutes ?? '',
-      clockIn: hhmm(row.clock_in_at),
-      clockOut: hhmm(row.clock_out_at),
-      workMinutes: formatMinutes(row.work_minutes),
-      workMinutesRaw: Number(row.work_minutes || 0),
-      workLocationName: row.work_style || row.clock_in_area || '',
-      addressMemo: '',
-      issueType: '',
-      issueText: row.note || '',
-      transportation: []
-    }));
+    let totalMinutes = 0;
+    let attendanceDays = 0;
+    let attentionCount = 0;
+    let firstIssue = null;
+
+    const records = (result.results || []).map(row => {
+      const weekday = weekdayInfo(row.work_date);
+      const hasClock = Boolean(row.clock_in_at || row.clock_out_at);
+      const hasIssue = Boolean(row.note);
+      const minutes = Number(row.work_minutes || 0);
+
+      if (row.clock_in_at) attendanceDays += 1;
+      totalMinutes += minutes;
+      if (hasIssue) attentionCount += 1;
+
+      const record = {
+        attendanceId: row.attendance_id,
+        date: row.work_date,
+        weekday: weekday.label,
+        isSunday: weekday.isSunday,
+        isSaturday: weekday.isSaturday,
+        workType: row.work_type || '',
+        workStyle: row.work_style || '',
+        workPatternId: row.work_pattern_id || '',
+        workPatternName: row.work_pattern_name || '',
+        scheduledStartTime: hhmm(row.scheduled_start_time),
+        scheduledEndTime: hhmm(row.scheduled_end_time),
+        breakMinutes: row.break_minutes ?? '',
+        clockIn: hhmm(row.clock_in_at),
+        clockOut: hhmm(row.clock_out_at),
+        workMinutes: workText(minutes),
+        workMinutesRaw: minutes,
+        workLocationName: row.work_style || row.clock_in_area || '',
+        addressMemo: '',
+        issueType: '',
+        issueText: row.note || '',
+        status: hasIssue ? 'attention' : (hasClock ? 'ok' : 'blank'),
+        transportation: []
+      };
+
+      if (!firstIssue && hasIssue) firstIssue = record;
+      return record;
+    });
 
     return jsonResponse({
       ok: true,
       data: {
         year,
         month,
+        summary: {
+          attendanceDays,
+          totalWorkText: totalWorkText(totalMinutes),
+          attentionCount
+        },
+        firstIssue,
         records
       }
     });
