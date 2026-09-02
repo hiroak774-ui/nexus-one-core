@@ -9,6 +9,26 @@ function makeUserId(sub) {
   return `USR_${sub}`;
 }
 
+async function ensureCompanyMaster(db) {
+  await db.prepare(`
+    INSERT INTO companies (company_id, company_name, domain, status)
+    VALUES ('HRC', 'HR COMPANY株式会社', NULL, '有効')
+    ON CONFLICT(company_id) DO UPDATE SET
+      company_name = 'HR COMPANY株式会社',
+      status = '有効',
+      updated_at = CURRENT_TIMESTAMP
+  `).run();
+
+  await db.prepare(`
+    INSERT INTO companies (company_id, company_name, domain, status)
+    VALUES ('GANBARU', '株式会社がんばる', NULL, '有効')
+    ON CONFLICT(company_id) DO UPDATE SET
+      company_name = '株式会社がんばる',
+      status = '有効',
+      updated_at = CURRENT_TIMESTAMP
+  `).run();
+}
+
 async function loadAccess(db, userId) {
   const employeeResult = await db.prepare(`
     SELECT
@@ -26,9 +46,13 @@ async function loadAccess(db, userId) {
       e.city_address,
       e.street_address,
       e.building,
-      c.company_name
+      c.company_name,
+      wp.display_name AS work_pattern_name,
+      wp.start_time AS work_pattern_start_time,
+      wp.end_time AS work_pattern_end_time
     FROM employees e
     JOIN companies c ON c.company_id = e.company_id
+    LEFT JOIN work_patterns wp ON wp.work_pattern_id = e.base_work_pattern_id
     WHERE e.user_id = ?
     ORDER BY e.company_id
   `).bind(userId).all();
@@ -74,6 +98,8 @@ export async function onRequestPost(context) {
     const userId = makeUserId(google.sub);
     const now = new Date().toISOString();
 
+    await ensureCompanyMaster(env.DB);
+
     await env.DB.prepare(`
       INSERT INTO users (
         user_id,
@@ -112,8 +138,9 @@ export async function onRequestPost(context) {
     }
 
     const access = await loadAccess(env.DB, user.user_id);
-    const approvedEmployees = access.employees.filter(e => e.registration_status === '承認済' && e.employment_status === '在籍');
-    const pendingEmployees = access.employees.filter(e => e.registration_status === '承認待ち');
+    const approvedEmployee = access.employees.find(e => e.registration_status === '承認済' && e.employment_status === '在籍') || null;
+    const pendingEmployee = access.employees.find(e => e.registration_status === '承認待ち') || null;
+    const authState = approvedEmployee ? 'approved' : pendingEmployee ? 'pending' : 'unregistered';
 
     return jsonResponse({
       ok: true,
@@ -125,16 +152,18 @@ export async function onRequestPost(context) {
       },
       user,
       employees: access.employees,
+      currentEmployee: approvedEmployee || pendingEmployee,
+      authState,
       adminCompanies: access.adminCompanies,
       permissions: {
-        isEmployee: approvedEmployees.length > 0,
+        isEmployee: Boolean(approvedEmployee),
         isAdmin: access.adminCompanies.length > 0,
-        canOpenStaff: approvedEmployees.length > 0,
+        canOpenStaff: Boolean(approvedEmployee),
         canOpenAdmin: access.adminCompanies.length > 0
       },
       onboarding: {
         registrationRequired: access.employees.length === 0,
-        approvalPending: pendingEmployees.length > 0
+        approvalPending: Boolean(pendingEmployee)
       }
     });
   } catch (error) {
