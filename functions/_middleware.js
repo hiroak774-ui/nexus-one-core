@@ -15,6 +15,47 @@ function sanitizeLegacyStaffShell(html) {
     .replace(/HR COMPANY(?!株式会社)/g, 'HR COMPANY株式会社');
 }
 
+const SETUP_SCROLL_FIX = `<script>
+(() => {
+  function fixSetupScroll(frame) {
+    try {
+      const win = frame.contentWindow;
+      const doc = frame.contentDocument;
+      if (!doc || win?.__NEXUS_VIEW_KEY !== 'setup') return;
+
+      const content = doc.getElementById('setupContent') || doc.querySelector('.content');
+      if (!content) return;
+
+      doc.documentElement.style.height = '100%';
+      doc.body.style.height = '100%';
+      doc.body.style.overflow = 'hidden';
+
+      content.style.height = '100%';
+      content.style.minHeight = '0';
+      content.style.overflowX = 'hidden';
+      content.style.overflowY = 'auto';
+      content.style.webkitOverflowScrolling = 'touch';
+      content.style.touchAction = 'pan-y';
+      content.style.overscrollBehaviorY = 'contain';
+      content.style.paddingBottom = 'calc(36px + env(safe-area-inset-bottom))';
+    } catch (_) {}
+  }
+
+  function scan() {
+    document.querySelectorAll('#nexus-root iframe').forEach(frame => {
+      fixSetupScroll(frame);
+      if (frame.dataset.nexusSetupScrollBound === '1') return;
+      frame.dataset.nexusSetupScrollBound = '1';
+      frame.addEventListener('load', () => fixSetupScroll(frame));
+    });
+  }
+
+  new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener('DOMContentLoaded', scan);
+  scan();
+})();
+</script>`;
+
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const response = await context.next();
@@ -30,12 +71,16 @@ export async function onRequest(context) {
   html = sanitizeLegacyStaffShell(html);
 
   const scriptTag = '<script src="/nexus-auth-client.js"></script>';
-  if (!html.includes('/nexus-auth-client.js')) {
+  const scripts = [];
+  if (!html.includes('/nexus-auth-client.js')) scripts.push(scriptTag);
+  if (!html.includes('nexusSetupScrollBound')) scripts.push(SETUP_SCROLL_FIX);
+
+  if (scripts.length) {
     const lower = html.toLowerCase();
     const bodyIndex = lower.lastIndexOf('</body>');
     html = bodyIndex >= 0
-      ? html.slice(0, bodyIndex) + scriptTag + html.slice(bodyIndex)
-      : html + scriptTag;
+      ? html.slice(0, bodyIndex) + scripts.join('') + html.slice(bodyIndex)
+      : html + scripts.join('');
   }
 
   const headers = new Headers(response.headers);
