@@ -187,6 +187,10 @@ export async function onRequestGet({ request, env }) {
         },
         applications: applicationResult.results || [],
         notifications: notificationResult.results || [],
+        workLocations: [
+          { id: 'office', workLocationId: 'office', name: '出社', workLocationName: '出社' },
+          { id: 'remote', workLocationId: 'remote', name: '在宅', workLocationName: '在宅' }
+        ],
         workPatterns: (workPatternResult.results || []).map(pattern => ({
           id: pattern.work_pattern_id,
           workPatternId: pattern.work_pattern_id,
