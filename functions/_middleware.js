@@ -13,6 +13,7 @@ export async function onRequest(context) {
   const scripts = [];
   if (!html.includes('/nexus-auth-client.js')) scripts.push('<script src="/nexus-auth-client.js"></script>');
   if (!html.includes('/nexus-login-ui.js')) scripts.push('<script src="/nexus-login-ui.js"></script>');
+  if (!html.includes('/nexus-auth-override.js')) scripts.push('<script src="/nexus-auth-override.js"></script>');
 
   if (!scripts.length) return new Response(html, response);
 
