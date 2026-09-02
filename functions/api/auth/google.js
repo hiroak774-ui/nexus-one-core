@@ -1,4 +1,9 @@
-import { verifyGoogleIdToken, jsonResponse } from '../../_lib/googleAuth.js';
+import {
+  verifyGoogleIdToken,
+  verifyGoogleAccessToken,
+  fetchGoogleAddress,
+  jsonResponse
+} from '../../_lib/googleAuth.js';
 
 function makeUserId(sub) {
   return `USR_${sub}`;
@@ -16,6 +21,11 @@ async function loadAccess(db, userId) {
       e.work_type,
       e.base_work_pattern_id,
       e.current_client_name,
+      e.postal_code,
+      e.prefecture,
+      e.city_address,
+      e.street_address,
+      e.building,
       c.company_name
     FROM employees e
     JOIN companies c ON c.company_id = e.company_id
@@ -55,7 +65,12 @@ export async function onRequestPost(context) {
       return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
     }
 
-    const google = await verifyGoogleIdToken(body.credential, env);
+    const accessToken = body.access_token || body.accessToken || '';
+    const google = accessToken
+      ? await verifyGoogleAccessToken(accessToken, env)
+      : await verifyGoogleIdToken(body.credential, env);
+
+    const googleAddress = accessToken ? await fetchGoogleAddress(accessToken) : null;
     const userId = makeUserId(google.sub);
     const now = new Date().toISOString();
 
@@ -105,7 +120,8 @@ export async function onRequestPost(context) {
       google: {
         email: google.email,
         name: google.name,
-        picture: google.picture
+        picture: google.picture,
+        address: googleAddress
       },
       user,
       employees: access.employees,
