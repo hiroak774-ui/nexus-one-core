@@ -42,8 +42,11 @@ export async function verifyGoogleAccessToken(accessToken, env) {
   if (!tokenInfoResponse.ok) throw new Error('Invalid Google access token');
   const tokenInfo = await tokenInfoResponse.json();
 
-  const audience = tokenInfo.audience || tokenInfo.issued_to || '';
-  if (audience !== env.GOOGLE_CLIENT_ID) throw new Error('Google token audience mismatch');
+  const clientCandidates = [tokenInfo.issued_to, tokenInfo.audience, tokenInfo.azp].filter(Boolean);
+  if (!clientCandidates.includes(env.GOOGLE_CLIENT_ID)) {
+    throw new Error('Google token audience mismatch');
+  }
+
   if (tokenInfo.verified_email !== true && tokenInfo.verified_email !== 'true') {
     throw new Error('Google email is not verified');
   }
