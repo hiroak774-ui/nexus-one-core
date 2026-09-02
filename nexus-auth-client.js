@@ -1,86 +1,78 @@
 (() => {
   const TOKEN_KEY = 'nexusGoogleAccessToken';
-  const GOOGLE_ADDRESS_KEY = 'nexusGoogleAddress';
+  const ADDRESS_KEY = 'nexusGoogleAddress';
   const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
   const AUTH_CONFIG_URL = '/api/auth/config';
   const GOOGLE_AUTH_URL = '/api/auth/google';
   const ME_URL = '/api/me';
   const INITIAL_REG_URL = '/api/registrations/initial';
+  const STAFF_HOME_URL = '/api/staff/home';
   const STAFF_ROUTES = new Set(['home', 'attendance', 'application', 'mypage']);
-  const LEGACY_EMPLOYEE_KEYS = ['nexusEmployeeId', 'nexusCurrentEmployeeId', 'employeeId'];
+  const EMPLOYEE_KEYS = ['nexusEmployeeId', 'nexusCurrentEmployeeId', 'employeeId'];
 
-  let authContext = null;
-  let authPromise = null;
+  let context = null;
+  let contextPromise = null;
   let googlePromise = null;
-  let authConfigPromise = null;
-  let tokenClient = null;
+  let configPromise = null;
   let guarding = false;
 
-  function safeGet(storage, key) {
+  const get = (storage, key) => {
     try { return storage.getItem(key) || ''; } catch (_) { return ''; }
-  }
+  };
+  const set = (storage, key, value) => {
+    try { value ? storage.setItem(key, value) : storage.removeItem(key); } catch (_) {}
+  };
 
-  function safeSet(storage, key, value) {
-    try {
-      if (value) storage.setItem(key, value);
-      else storage.removeItem(key);
-    } catch (_) {}
-  }
-
-  function clearLegacyEmployeeState() {
-    LEGACY_EMPLOYEE_KEYS.forEach(key => {
-      safeSet(sessionStorage, key, '');
-      safeSet(localStorage, key, '');
+  function clearEmployeeCompatibility() {
+    EMPLOYEE_KEYS.forEach(key => {
+      set(sessionStorage, key, '');
+      set(localStorage, key, '');
     });
-    ['nexusMobileInitialData', 'nexusMobileInitialDataAt', 'nexusHomeLoaded', 'nexusHomeData', 'nexusAttendanceData', 'nexusApplicationData', 'nexusMyPageData', 'nexusGasApiUrl']
+  }
+
+  function disableLegacyGas() {
+    try { localStorage.setItem('nexusGasApiUrl', 'about:blank'); } catch (_) {}
+    ['nexusMobileInitialData', 'nexusMobileInitialDataAt', 'nexusHomeLoaded', 'nexusHomeData', 'nexusAttendanceData', 'nexusApplicationData', 'nexusMyPageData']
       .forEach(key => {
-        safeSet(sessionStorage, key, '');
-        safeSet(localStorage, key, '');
+        set(sessionStorage, key, '');
+        set(localStorage, key, '');
       });
   }
 
-  function clearAuth() {
-    safeSet(sessionStorage, TOKEN_KEY, '');
-    safeSet(sessionStorage, GOOGLE_ADDRESS_KEY, '');
-    authContext = null;
-    authPromise = null;
-    clearLegacyEmployeeState();
+  function syncCompatibilityEmployee() {
+    clearEmployeeCompatibility();
+    if (context?.authState === 'approved' && context.currentEmployee?.employee_id) {
+      set(sessionStorage, 'nexusEmployeeId', context.currentEmployee.employee_id);
+    }
   }
 
-  function currentRoute() {
+  function clearAuth() {
+    set(sessionStorage, TOKEN_KEY, '');
+    set(sessionStorage, ADDRESS_KEY, '');
+    context = null;
+    contextPromise = null;
+    clearEmployeeCompatibility();
+  }
+
+  function route() {
     return (location.hash || '').replace(/^#/, '') || 'entry';
   }
 
-  function replaceRoute(route) {
-    const hash = `#${route}`;
-    if (location.hash === hash) {
-      if (window.NEXUS?.navigate) window.NEXUS.navigate(route);
-      return;
-    }
-    history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
-    if (window.NEXUS?.navigate) window.NEXUS.navigate(route);
+  function go(target) {
+    const hash = `#${target}`;
+    if (location.hash !== hash) history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
+    if (window.NEXUS?.navigate) window.NEXUS.navigate(target);
     else window.dispatchEvent(new HashChangeEvent('hashchange'));
   }
 
-  function resolveState(ctx) {
-    if (!ctx?.authenticated) return 'unauthenticated';
-    if (ctx.authState === 'approved') return 'approved';
-    if (ctx.authState === 'pending') return 'pending';
-    return 'unregistered';
-  }
+  async function me(force = false) {
+    const token = get(sessionStorage, TOKEN_KEY);
+    if (!token) return null;
+    if (!force && context) return context;
+    if (!force && contextPromise) return contextPromise;
 
-  async function fetchMe(force = false) {
-    const token = safeGet(sessionStorage, TOKEN_KEY);
-    if (!token) {
-      authContext = null;
-      return null;
-    }
-    if (!force && authContext) return authContext;
-    if (!force && authPromise) return authPromise;
-
-    authPromise = (async () => {
+    contextPromise = (async () => {
       const response = await fetch(ME_URL, {
-        method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store'
       });
@@ -90,73 +82,62 @@
         return null;
       }
       if (!response.ok || !data.ok) throw new Error(data.error || 'ユーザー情報を取得できませんでした。');
-      authContext = data;
+      context = data;
+      syncCompatibilityEmployee();
       return data;
-    })().finally(() => { authPromise = null; });
+    })().finally(() => { contextPromise = null; });
 
-    return authPromise;
+    return contextPromise;
   }
 
-  async function guardRoute() {
+  async function guard() {
     if (guarding) return;
     guarding = true;
     try {
-      const requested = currentRoute();
-      const token = safeGet(sessionStorage, TOKEN_KEY);
-
-      if (!token) {
-        if (requested !== 'login') replaceRoute('login');
+      const requested = route();
+      if (!get(sessionStorage, TOKEN_KEY)) {
+        clearEmployeeCompatibility();
+        if (requested !== 'login') go('login');
         return;
       }
 
       let ctx;
-      try {
-        ctx = await fetchMe();
-      } catch (error) {
-        console.error('[NEXUS auth context]', error);
+      try { ctx = await me(); }
+      catch (error) {
+        console.error('[NEXUS auth]', error);
         clearAuth();
-        replaceRoute('login');
+        go('login');
         return;
       }
 
-      const state = resolveState(ctx);
-      if (state === 'unauthenticated') {
-        replaceRoute('login');
+      if (!ctx) {
+        go('login');
         return;
       }
 
-      if (state === 'approved') {
-        if (requested === 'entry' || requested === 'login' || requested === 'setup') replaceRoute('home');
+      if (ctx.authState === 'approved') {
+        syncCompatibilityEmployee();
+        if (requested === 'entry' || requested === 'login' || requested === 'setup') go('home');
         return;
       }
 
-      if (requested !== 'setup') replaceRoute('setup');
+      clearEmployeeCompatibility();
+      if (requested !== 'setup') go('setup');
     } finally {
       guarding = false;
-      setTimeout(scanFrames, 0);
+      setTimeout(scan, 0);
     }
   }
 
-  function setFrameStatus(doc, message, type = '') {
-    try {
-      const el = doc?.getElementById('statusText');
-      if (!el) return;
-      el.textContent = message || '';
-      if (type) el.dataset.status = type;
-    } catch (_) {}
+  function status(doc, message) {
+    const el = doc?.getElementById('statusText');
+    if (el) el.textContent = message || '';
   }
 
   function ensureGoogle() {
     if (window.google?.accounts?.oauth2) return Promise.resolve();
     if (googlePromise) return googlePromise;
     googlePromise = new Promise((resolve, reject) => {
-      const existing = document.querySelector(`script[src="${GOOGLE_SCRIPT}"]`);
-      if (existing) {
-        if (window.google?.accounts?.oauth2) return resolve();
-        existing.addEventListener('load', resolve, { once: true });
-        existing.addEventListener('error', reject, { once: true });
-        return;
-      }
       const script = document.createElement('script');
       script.src = GOOGLE_SCRIPT;
       script.async = true;
@@ -168,212 +149,192 @@
     return googlePromise;
   }
 
-  function getAuthConfig() {
-    if (!authConfigPromise) {
-      authConfigPromise = fetch(AUTH_CONFIG_URL, { cache: 'no-store' })
-        .then(async response => {
-          const data = await response.json();
-          if (!response.ok || !data.ok) throw new Error(data.error || 'Google認証設定を取得できませんでした。');
-          return data;
-        });
+  function config() {
+    if (!configPromise) {
+      configPromise = fetch(AUTH_CONFIG_URL, { cache: 'no-store' }).then(async response => {
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Google認証設定を取得できませんでした。');
+        return data;
+      });
     }
-    return authConfigPromise;
+    return configPromise;
   }
 
-  function rememberGoogleProfile(data) {
+  function rememberGoogle(data) {
     const google = data?.google || {};
     if (google.email) {
-      safeSet(sessionStorage, 'nexusUserEmail', google.email);
-      safeSet(localStorage, 'nexusUserEmail', google.email);
+      set(sessionStorage, 'nexusUserEmail', google.email);
+      set(localStorage, 'nexusUserEmail', google.email);
     }
     if (google.name) {
-      safeSet(sessionStorage, 'nexusUserName', google.name);
-      safeSet(localStorage, 'nexusUserName', google.name);
+      set(sessionStorage, 'nexusUserName', google.name);
+      set(localStorage, 'nexusUserName', google.name);
     }
-    if (google.address) safeSet(sessionStorage, GOOGLE_ADDRESS_KEY, JSON.stringify(google.address));
-    else safeSet(sessionStorage, GOOGLE_ADDRESS_KEY, '');
+    if (google.address) set(sessionStorage, ADDRESS_KEY, JSON.stringify(google.address));
   }
 
-  async function finishGoogleLogin(doc, accessToken) {
-    setFrameStatus(doc, 'Googleアカウントを確認しています。');
-    const response = await fetch(GOOGLE_AUTH_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ access_token: accessToken })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.ok) throw new Error(data.error || 'Google認証に失敗しました。');
-
-    clearLegacyEmployeeState();
-    safeSet(sessionStorage, TOKEN_KEY, accessToken);
-    rememberGoogleProfile(data);
-    authContext = null;
-    await fetchMe(true);
-    await guardRoute();
-  }
-
-  async function startGoogleLogin(doc) {
+  async function googleLogin(doc) {
     try {
-      setFrameStatus(doc, 'Googleログインを準備しています。');
-      const [config] = await Promise.all([getAuthConfig(), ensureGoogle()]);
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: config.clientId,
-        scope: config.scope,
+      status(doc, 'Googleログインを準備しています。');
+      const [cfg] = await Promise.all([config(), ensureGoogle()]);
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: cfg.clientId,
+        scope: cfg.scope,
         include_granted_scopes: true,
         prompt: 'consent',
-        callback: async response => {
+        callback: async result => {
           try {
-            if (response.error) throw new Error(response.error_description || response.error);
-            await finishGoogleLogin(doc, response.access_token);
+            if (result.error) throw new Error(result.error_description || result.error);
+            status(doc, 'Googleアカウントを確認しています。');
+            const response = await fetch(GOOGLE_AUTH_URL, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ access_token: result.access_token })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Google認証に失敗しました。');
+            clearEmployeeCompatibility();
+            set(sessionStorage, TOKEN_KEY, result.access_token);
+            rememberGoogle(data);
+            context = null;
+            await me(true);
+            await guard();
           } catch (error) {
             console.error('[NEXUS Google login]', error);
-            setFrameStatus(doc, error.message || 'Googleログインに失敗しました。', 'error');
+            status(doc, error.message || 'Googleログインに失敗しました。');
           }
         }
       });
-      tokenClient.requestAccessToken({ prompt: 'consent' });
+      client.requestAccessToken({ prompt: 'consent' });
     } catch (error) {
       console.error('[NEXUS Google login start]', error);
-      setFrameStatus(doc, error.message || 'Googleログインを開始できませんでした。', 'error');
+      status(doc, error.message || 'Googleログインを開始できませんでした。');
     }
   }
 
-  function bindLoginFrame(doc) {
-    const googleBtn = doc?.getElementById('googleBtn');
-    if (!googleBtn || googleBtn.dataset.nexusD1AuthBound === '1') return;
-
-    const fresh = googleBtn.cloneNode(true);
-    fresh.dataset.nexusD1AuthBound = '1';
-    googleBtn.replaceWith(fresh);
+  function bindLogin(doc) {
+    const button = doc?.getElementById('googleBtn');
+    if (!button || button.dataset.nexusD1 === '1') return;
+    const fresh = button.cloneNode(true);
+    fresh.dataset.nexusD1 = '1';
+    button.replaceWith(fresh);
     fresh.addEventListener('click', event => {
       event.preventDefault();
       event.stopImmediatePropagation();
-      startGoogleLogin(doc);
+      googleLogin(doc);
     }, true);
-
     ['loginBtn', 'emailBtn'].forEach(id => {
       const el = doc.getElementById(id);
       if (el) el.style.display = 'none';
     });
-    const emailInput = doc.getElementById('emailInput');
-    if (emailInput) {
-      const row = emailInput.closest('.row, .field, .form-group, label, div');
-      if (row) row.style.display = 'none';
-      else emailInput.style.display = 'none';
+    const email = doc.getElementById('emailInput');
+    if (email) {
+      const holder = email.closest('.row, .field, .form-group, label');
+      if (holder) holder.style.display = 'none';
+      else email.style.display = 'none';
     }
-  }
-
-  function officialCompanyOptions(doc) {
-    const companyValue = doc.getElementById('companyValue');
-    if (companyValue && !companyValue.dataset.id) companyValue.dataset.id = 'HRC';
-    if (companyValue?.dataset.id === 'ITC') companyValue.dataset.id = 'GANBARU';
-    if (companyValue?.dataset.id === 'HRC') companyValue.textContent = 'HR COMPANY株式会社';
-    if (companyValue?.dataset.id === 'GANBARU') companyValue.textContent = '株式会社がんばる';
-
-    const trigger = doc.querySelector('[data-sheet="company"]');
-    if (!trigger || trigger.dataset.nexusCompanyBound === '1') return;
-    trigger.dataset.nexusCompanyBound = '1';
-    trigger.addEventListener('click', () => {
-      setTimeout(() => {
-        const options = [...doc.querySelectorAll('#sheetOptions .option')];
-        if (options.length < 2) return;
-        const values = [
-          { id: 'HRC', label: 'HR COMPANY株式会社' },
-          { id: 'GANBARU', label: '株式会社がんばる' }
-        ];
-        options.slice(0, 2).forEach((option, index) => {
-          const value = values[index];
-          option.textContent = value.label;
-          option.onclick = () => {
-            const target = doc.getElementById('companyValue');
-            if (target) {
-              target.textContent = value.label;
-              target.dataset.id = value.id;
-            }
-            doc.getElementById('sheet')?.classList.remove('show');
-            doc.getElementById('sheetBackdrop')?.classList.remove('show');
-          };
-        });
-        options.slice(2).forEach(option => option.remove());
-      }, 0);
-    }, true);
-  }
-
-  function makeAddressField(doc, id, label, placeholder, autocomplete) {
-    const row = doc.createElement('div');
-    row.className = 'row nexus-address-row';
-    row.innerHTML = `<div class="row-icon"></div><div class="meta"><div class="label">${label}</div><input class="text-input" id="${id}" type="text" autocomplete="${autocomplete}" placeholder="${placeholder}"></div>`;
-    return row;
   }
 
   function ensureAddressFields(doc) {
     if (doc.getElementById('postalCodeInput')) return;
-    const emailInput = doc.getElementById('emailInput');
-    const emailRow = emailInput?.closest('.row');
+    const emailRow = doc.getElementById('emailInput')?.closest('.row');
     if (!emailRow) return;
-
-    const fragment = doc.createDocumentFragment();
-    fragment.appendChild(makeAddressField(doc, 'postalCodeInput', '郵便番号', '123-4567', 'postal-code'));
-    fragment.appendChild(makeAddressField(doc, 'prefectureInput', '都道府県', '神奈川県', 'address-level1'));
-    fragment.appendChild(makeAddressField(doc, 'cityAddressInput', '市区町村', '横浜市戸塚区', 'address-level2'));
-    fragment.appendChild(makeAddressField(doc, 'streetAddressInput', '番地', '戸塚町1-2-3', 'address-line1'));
-    fragment.appendChild(makeAddressField(doc, 'buildingInput', '建物名・部屋番号', 'NEXUSレジデンス101', 'address-line2'));
-    emailRow.after(fragment);
-
+    const fields = [
+      ['postalCodeInput', '郵便番号', '123-4567', 'postal-code'],
+      ['prefectureInput', '都道府県', '神奈川県', 'address-level1'],
+      ['cityAddressInput', '市区町村', '横浜市戸塚区', 'address-level2'],
+      ['streetAddressInput', '番地', '戸塚町1-2-3', 'address-line1'],
+      ['buildingInput', '建物名・部屋番号', 'NEXUSレジデンス101', 'address-line2']
+    ];
+    let anchor = emailRow;
+    fields.forEach(([id, label, placeholder, autocomplete]) => {
+      const row = doc.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<div class="row-icon"></div><div class="meta"><div class="label">${label}</div><input class="text-input" id="${id}" type="text" autocomplete="${autocomplete}" placeholder="${placeholder}"></div>`;
+      anchor.after(row);
+      anchor = row;
+    });
     try {
-      const address = JSON.parse(safeGet(sessionStorage, GOOGLE_ADDRESS_KEY) || 'null');
+      const address = JSON.parse(get(sessionStorage, ADDRESS_KEY) || 'null');
       if (!address) return;
-      const values = {
+      const map = {
         postalCodeInput: address.postalCode,
         prefectureInput: address.prefecture,
         cityAddressInput: address.cityAddress,
         streetAddressInput: address.streetAddress,
         buildingInput: address.building
       };
-      Object.entries(values).forEach(([id, value]) => {
+      Object.entries(map).forEach(([id, value]) => {
         const input = doc.getElementById(id);
         if (input && value) input.value = value;
       });
     } catch (_) {}
   }
 
-  function renderSetupState(doc) {
-    const state = resolveState(authContext);
-    const nameInput = doc.getElementById('nameInput');
-    const emailInput = doc.getElementById('emailInput');
-    const google = authContext?.google || {};
-    if (nameInput && !nameInput.value) nameInput.value = google.name || safeGet(sessionStorage, 'nexusUserName');
-    if (emailInput) {
-      emailInput.value = google.email || safeGet(sessionStorage, 'nexusUserEmail');
-      emailInput.readOnly = true;
+  function bindCompanies(doc) {
+    const value = doc.getElementById('companyValue');
+    if (value) {
+      if (value.dataset.id === 'ITC') value.dataset.id = 'GANBARU';
+      if (!value.dataset.id) value.dataset.id = 'HRC';
+      value.textContent = value.dataset.id === 'GANBARU' ? '株式会社がんばる' : 'HR COMPANY株式会社';
     }
+    const trigger = doc.querySelector('[data-sheet="company"]');
+    if (!trigger || trigger.dataset.nexusD1 === '1') return;
+    trigger.dataset.nexusD1 = '1';
+    trigger.addEventListener('click', () => {
+      setTimeout(() => {
+        const options = [...doc.querySelectorAll('#sheetOptions .option')];
+        const companies = [
+          ['HRC', 'HR COMPANY株式会社'],
+          ['GANBARU', '株式会社がんばる']
+        ];
+        options.forEach((option, index) => {
+          if (index >= 2) return option.remove();
+          const [id, label] = companies[index];
+          option.textContent = label;
+          option.onclick = () => {
+            const target = doc.getElementById('companyValue');
+            if (target) {
+              target.dataset.id = id;
+              target.textContent = label;
+            }
+            doc.getElementById('sheet')?.classList.remove('show');
+            doc.getElementById('sheetBackdrop')?.classList.remove('show');
+          };
+        });
+      }, 0);
+    }, true);
+  }
 
-    if (state === 'pending') {
-      setFrameStatus(doc, '初回登録は承認待ちです。承認後にスタッフ画面を利用できます。', 'warning');
+  function renderSetup(doc) {
+    const google = context?.google || {};
+    const name = doc.getElementById('nameInput');
+    const email = doc.getElementById('emailInput');
+    if (name && !name.value) name.value = google.name || get(sessionStorage, 'nexusUserName');
+    if (email) {
+      email.value = google.email || get(sessionStorage, 'nexusUserEmail');
+      email.readOnly = true;
+    }
+    if (context?.authState === 'pending') {
+      status(doc, '登録申請は承認待ちです。承認後にスタッフ画面を利用できます。');
       const submit = doc.getElementById('submitBtn');
       if (submit) submit.style.display = 'none';
       doc.getElementById('done')?.classList.add('show');
     }
   }
 
-  async function submitInitialRegistration(doc, event) {
+  async function submitRegistration(doc, event) {
     event.preventDefault();
     event.stopImmediatePropagation();
+    const token = get(sessionStorage, TOKEN_KEY);
+    if (!token) return go('login');
 
-    const token = safeGet(sessionStorage, TOKEN_KEY);
-    if (!token) {
-      clearAuth();
-      replaceRoute('login');
-      return;
-    }
-
-    const name = doc.getElementById('nameInput')?.value.trim() || '';
     const company = doc.getElementById('companyValue');
     const workTypeEl = doc.getElementById('workTypeValue');
     const pattern = doc.getElementById('patternValue');
     const workType = workTypeEl?.dataset.type || workTypeEl?.textContent.trim() || '固定勤務';
     const payload = {
-      name,
+      name: doc.getElementById('nameInput')?.value.trim() || '',
       companyId: company?.dataset.id || '',
       workType,
       baseWorkPatternId: workType === 'シフト勤務' ? '' : (pattern?.dataset.id || ''),
@@ -384,75 +345,100 @@
       building: doc.getElementById('buildingInput')?.value.trim() || ''
     };
 
-    if (!payload.name) return setFrameStatus(doc, '氏名を入力してください。', 'warning');
-    if (!['HRC', 'GANBARU'].includes(payload.companyId)) return setFrameStatus(doc, '所属会社を選択してください。', 'warning');
-    if (!payload.prefecture || !payload.cityAddress || !payload.streetAddress) return setFrameStatus(doc, '現住所を入力してください。', 'warning');
+    if (!payload.name) return status(doc, '氏名を入力してください。');
+    if (!['HRC', 'GANBARU'].includes(payload.companyId)) return status(doc, '所属会社を選択してください。');
+    if (!payload.prefecture || !payload.cityAddress || !payload.streetAddress) return status(doc, '現住所を入力してください。');
 
-    const btn = doc.getElementById('submitBtn');
-    if (btn) btn.disabled = true;
-    setFrameStatus(doc, '登録申請を送信しています。');
-
+    const button = doc.getElementById('submitBtn');
+    if (button) button.disabled = true;
+    status(doc, '登録申請を送信しています。');
     try {
       const response = await fetch(INITIAL_REG_URL, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
+        headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload)
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.ok) throw new Error(data.error || '登録申請に失敗しました。');
-      authContext = null;
-      await fetchMe(true);
-      setFrameStatus(doc, '登録申請を受け付けました。承認までお待ちください。', 'success');
+      context = null;
+      await me(true);
+      status(doc, '登録申請を受け付けました。承認までお待ちください。');
       doc.getElementById('done')?.classList.add('show');
-      if (btn) btn.style.display = 'none';
-      await guardRoute();
+      if (button) button.style.display = 'none';
+      await guard();
     } catch (error) {
-      console.error('[NEXUS initial registration]', error);
-      if (btn) btn.disabled = false;
-      setFrameStatus(doc, error.message || '登録申請に失敗しました。', 'error');
+      if (button) button.disabled = false;
+      status(doc, error.message || '登録申請に失敗しました。');
     }
   }
 
-  function bindSetupFrame(doc) {
-    if (!doc || doc.documentElement.dataset.nexusD1SetupBound === '1') {
-      renderSetupState(doc);
+  function bindSetup(doc) {
+    if (!doc || doc.documentElement.dataset.nexusD1Setup === '1') {
+      renderSetup(doc);
       return;
     }
-    doc.documentElement.dataset.nexusD1SetupBound = '1';
-    officialCompanyOptions(doc);
+    doc.documentElement.dataset.nexusD1Setup = '1';
     ensureAddressFields(doc);
-    renderSetupState(doc);
-
+    bindCompanies(doc);
+    renderSetup(doc);
     const submit = doc.getElementById('submitBtn');
     if (submit) {
       const fresh = submit.cloneNode(true);
       submit.replaceWith(fresh);
-      fresh.addEventListener('click', event => submitInitialRegistration(doc, event), true);
+      fresh.addEventListener('click', event => submitRegistration(doc, event), true);
     }
   }
 
-  function bindStaffFrame(doc) {
-    if (!doc || doc.documentElement.dataset.nexusD1StaffBound === '1') return;
-    doc.documentElement.dataset.nexusD1StaffBound = '1';
-    const ctx = authContext;
-    if (resolveState(ctx) !== 'approved') return;
-    const employee = ctx.currentEmployee || null;
-    if (!employee) return;
+  async function loadHome(doc) {
+    const token = get(sessionStorage, TOKEN_KEY);
+    if (!token || context?.authState !== 'approved') return;
+    try {
+      const response = await fetch(STAFF_HOME_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store'
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) throw new Error(payload.error || 'Homeデータを取得できませんでした。');
+      const win = doc.defaultView;
+      if (typeof win?.applyHomeData === 'function') win.applyHomeData(payload);
+      else {
+        const employee = payload.data?.employee || {};
+        const summary = payload.data?.summary || {};
+        const attendance = payload.data?.todayAttendance || {};
+        const text = (id, value) => { const el = doc.getElementById(id); if (el) el.textContent = value; };
+        text('userName', employee.name || '');
+        text('monthlyWorkDays', `${summary.workDays || 0}日`);
+        text('monthlyWorkHours', `${summary.workHours || 0}h`);
+        text('inSub', attendance.clockInAt || '未打刻');
+        text('outSub', attendance.clockOutAt || '未打刻');
+      }
+      EMPLOYEE_KEYS.forEach(key => set(localStorage, key, ''));
+      if (win) win.setApiStatus = () => {};
+    } catch (error) {
+      console.error('[NEXUS staff home]', error);
+      const text = (id, value) => { const el = doc.getElementById(id); if (el) el.textContent = value; };
+      text('monthlyWorkDays', '0日');
+      text('monthlyWorkHours', '0h');
+      text('inSub', '未打刻');
+      text('outSub', '未打刻');
+    }
+  }
 
-    const nameTargets = ['userName', 'employeeName', 'profileName'];
-    nameTargets.forEach(id => {
+  function bindStaff(doc, key) {
+    if (!doc || context?.authState !== 'approved') return;
+    const employee = context.currentEmployee || {};
+    ['userName', 'employeeName', 'profileName'].forEach(id => {
       const el = doc.getElementById(id);
-      if (el) el.textContent = employee.official_name || ctx.google?.name || '';
+      if (el) el.textContent = employee.official_name || context.google?.name || '';
     });
-
-    const companyTargets = ['companyName', 'companyValue', 'profileCompany'];
-    companyTargets.forEach(id => {
+    ['companyName', 'companyValue', 'profileCompany'].forEach(id => {
       const el = doc.getElementById(id);
       if (el) el.textContent = employee.company_name || '';
     });
+    if (key === 'home' && doc.documentElement.dataset.nexusD1Home !== '1') {
+      doc.documentElement.dataset.nexusD1Home = '1';
+      loadHome(doc);
+    }
   }
 
   function bindFrame(frame) {
@@ -460,13 +446,13 @@
       const doc = frame.contentDocument;
       if (!doc) return;
       const key = frame.contentWindow?.__NEXUS_VIEW_KEY || '';
-      if (key === 'login' || doc.getElementById('googleBtn')) bindLoginFrame(doc);
-      if (key === 'setup' || (doc.getElementById('submitBtn') && doc.getElementById('nameInput'))) bindSetupFrame(doc);
-      if (STAFF_ROUTES.has(key)) bindStaffFrame(doc);
+      if (key === 'login' || doc.getElementById('googleBtn')) bindLogin(doc);
+      if (key === 'setup' || (doc.getElementById('nameInput') && doc.getElementById('submitBtn'))) bindSetup(doc);
+      if (STAFF_ROUTES.has(key)) bindStaff(doc, key);
     } catch (_) {}
   }
 
-  function scanFrames() {
+  function scan() {
     document.querySelectorAll('#nexus-root iframe').forEach(frame => {
       if (!frame.dataset.nexusD1Listener) {
         frame.dataset.nexusD1Listener = '1';
@@ -477,25 +463,23 @@
   }
 
   async function boot() {
-    clearLegacyEmployeeState();
-    scanFrames();
-    await guardRoute();
+    disableLegacyGas();
+    clearEmployeeCompatibility();
+    scan();
+    await guard();
   }
 
   window.NEXUS_AUTH = {
-    get context() { return authContext; },
-    refresh: () => fetchMe(true),
-    guard: guardRoute,
-    logout() {
-      clearAuth();
-      replaceRoute('login');
-    }
+    get context() { return context; },
+    refresh: () => me(true),
+    guard,
+    logout() { clearAuth(); go('login'); }
   };
 
-  new MutationObserver(scanFrames).observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('DOMContentLoaded', boot, { once: true });
-  window.addEventListener('hashchange', () => { guardRoute(); });
-  window.addEventListener('pageshow', () => { guardRoute(); });
-  scanFrames();
+  window.addEventListener('hashchange', guard);
+  window.addEventListener('pageshow', guard);
+  scan();
   boot();
 })();
