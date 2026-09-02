@@ -5,10 +5,12 @@
   const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
   const TOKEN_KEY = 'nexusGoogleAccessToken';
   const ADDRESS_KEY = 'nexusGoogleAddress';
+  const LOGIN_VIEW = 'NEXUS_ONE_Login_Unified_v3_mobile_optimized.html';
 
   let googleScriptPromise;
   let tokenClient;
   let authConfig;
+  let initialRouteHandled = false;
 
   function loadGoogleScript() {
     if (window.google?.accounts?.oauth2) return Promise.resolve();
@@ -332,9 +334,33 @@
     btn?.addEventListener('click', event => { submitD1Registration(win, doc, event); }, true);
   }
 
+  function fixHourText(root) {
+    if (!root) return;
+    const walker = root.createTreeWalker(root.body || root.documentElement, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node => {
+      if (/\b\d+hh\b/.test(node.nodeValue || '')) {
+        node.nodeValue = node.nodeValue.replace(/\b(\d+)hh\b/g, '$1h');
+      }
+    });
+  }
+
+  function watchHourText(doc) {
+    if (!doc || doc.documentElement.dataset.nexusHourFix) return;
+    doc.documentElement.dataset.nexusHourFix = '1';
+    fixHourText(doc);
+    new MutationObserver(() => fixHourText(doc)).observe(doc.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+  }
+
   function bindFrame(frame) {
     try {
       const key = frame.contentWindow?.__NEXUS_VIEW_KEY;
+      watchHourText(frame.contentDocument);
       if (key === 'login') bindLoginFrame(frame);
       if (key === 'setup') bindSetupFrame(frame);
     } catch (_) {}
@@ -350,7 +376,30 @@
     });
   }
 
+  function forceInitialLogin() {
+    if (initialRouteHandled) return;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      if (window.NEXUS?.navigate) {
+        clearInterval(timer);
+        initialRouteHandled = true;
+        let token = '';
+        try { token = sessionStorage.getItem(TOKEN_KEY) || ''; } catch (_) {}
+        if (!token) {
+          window.NEXUS.navigate(LOGIN_VIEW);
+        }
+      } else if (attempts >= 100) {
+        clearInterval(timer);
+      }
+    }, 50);
+  }
+
   new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener('DOMContentLoaded', scan);
+  window.addEventListener('DOMContentLoaded', () => {
+    scan();
+    forceInitialLogin();
+  });
   scan();
+  forceInitialLogin();
 })();
