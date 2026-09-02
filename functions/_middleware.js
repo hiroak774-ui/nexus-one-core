@@ -16,10 +16,11 @@ export async function onRequest(context) {
 
   if (!scripts.length) return new Response(html, response);
 
-  const injected = html.replace(
-    /<\/body>/i,
-    `${scripts.join('')}</body>`
-  );
+  const lower = html.toLowerCase();
+  const bodyIndex = lower.lastIndexOf('</body>');
+  const injected = bodyIndex >= 0
+    ? html.slice(0, bodyIndex) + scripts.join('') + html.slice(bodyIndex)
+    : html + scripts.join('');
 
   const headers = new Headers(response.headers);
   headers.delete('content-length');
