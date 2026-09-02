@@ -1,11 +1,19 @@
--- NEXUS ONE / initial seed v1
+-- NEXUS ONE / initial seed v2
 PRAGMA foreign_keys = ON;
 
 INSERT OR IGNORE INTO companies
 (company_id, company_name, domain, status)
 VALUES
-('HRC', 'HR COMPANY', NULL, '有効'),
+('HRC', 'HR COMPANY株式会社', NULL, '有効'),
 ('GANBARU', '株式会社がんばる', NULL, '有効');
+
+UPDATE companies
+SET company_name = 'HR COMPANY株式会社', updated_at = CURRENT_TIMESTAMP
+WHERE company_id = 'HRC';
+
+UPDATE companies
+SET company_name = '株式会社がんばる', updated_at = CURRENT_TIMESTAMP
+WHERE company_id = 'GANBARU';
 
 INSERT OR IGNORE INTO work_patterns
 (work_pattern_id, company_id, display_name, start_time, end_time, break_minutes, display_order, is_active)
