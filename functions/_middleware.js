@@ -77,6 +77,9 @@ export async function onRequest(context) {
   if (!html.includes('/nexus-staff-profile.js')) {
     scripts.push('<script src="/nexus-staff-profile.js"></script>');
   }
+  if (!html.includes('/nexus-staff-runtime.js')) {
+    scripts.push('<script src="/nexus-staff-runtime.js"></script>');
+  }
   if (!html.includes('nexusSetupScrollBound')) {
     scripts.push(SETUP_SCROLL_FIX);
   }
