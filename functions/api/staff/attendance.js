@@ -70,9 +70,7 @@ export async function onRequestGet({ request, env }) {
         work_minutes,
         clock_in_area,
         clock_out_area,
-        address_memo,
-        issue_type,
-        issue_text
+        note
       FROM attendance
       WHERE employee_id = ?
         AND substr(work_date, 1, 7) = ?
@@ -95,9 +93,9 @@ export async function onRequestGet({ request, env }) {
       workMinutes: formatMinutes(row.work_minutes),
       workMinutesRaw: Number(row.work_minutes || 0),
       workLocationName: row.work_style || row.clock_in_area || '',
-      addressMemo: row.address_memo || '',
-      issueType: row.issue_type || '',
-      issueText: row.issue_text || '',
+      addressMemo: '',
+      issueType: '',
+      issueText: row.note || '',
       transportation: []
     }));
 
