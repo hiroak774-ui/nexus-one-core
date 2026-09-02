@@ -4,6 +4,8 @@
   const HOME_VIEW = 'NEXUS_ONE_Home_v6_mobile_optimized.html';
   const TOKEN_KEY = 'nexusGoogleAccessToken';
   const ADDRESS_KEY = 'nexusGoogleAddress';
+  const EMPLOYEE_KEYS = ['nexusEmployeeId', 'nexusCurrentEmployeeId', 'employeeId'];
+  const LEGACY_KEYS = ['nexusMobileInitialData', 'nexusMobileInitialDataAt', 'nexusHomeLoaded', 'nexusGasApiUrl'];
   let configPromise;
   let googlePromise;
   let tokenClient;
@@ -45,6 +47,20 @@
     if (el) el.textContent = message || '';
   }
 
+  function clearEmployeeState() {
+    for (const key of EMPLOYEE_KEYS) {
+      try { sessionStorage.removeItem(key); } catch (_) {}
+      try { localStorage.removeItem(key); } catch (_) {}
+    }
+  }
+
+  function clearLegacySampleState() {
+    for (const key of LEGACY_KEYS) {
+      try { sessionStorage.removeItem(key); } catch (_) {}
+      try { localStorage.removeItem(key); } catch (_) {}
+    }
+  }
+
   function storeProfile(data, accessToken) {
     sessionStorage.setItem(TOKEN_KEY, accessToken);
     if (data?.google?.address) sessionStorage.setItem(ADDRESS_KEY, JSON.stringify(data.google.address));
@@ -61,30 +77,42 @@
     }
   }
 
+  function saveApprovedEmployee(employee) {
+    if (!employee?.employee_id) return;
+    for (const key of EMPLOYEE_KEYS) {
+      sessionStorage.setItem(key, employee.employee_id);
+      localStorage.setItem(key, employee.employee_id);
+    }
+  }
+
+  function navigate(view, hash) {
+    if (!window.NEXUS?.navigate) throw new Error('画面遷移の準備ができていません。');
+    window.NEXUS.navigate(view);
+    if (hash) history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
+  }
+
   function routeAfterAuth(data) {
-    const employees = data.employees || [];
+    const employees = Array.isArray(data.employees) ? data.employees : [];
     const approved = employees.find(e => e.registration_status === '承認済' && e.employment_status === '在籍');
     const pending = employees.find(e => e.registration_status === '承認待ち');
 
+    clearLegacySampleState();
+    clearEmployeeState();
+
     if (approved) {
-      if (approved.employee_id) {
-        sessionStorage.setItem('nexusEmployeeId', approved.employee_id);
-        localStorage.setItem('nexusEmployeeId', approved.employee_id);
-      }
-      window.NEXUS?.navigate(HOME_VIEW);
+      saveApprovedEmployee(approved);
+      navigate(HOME_VIEW, '#home');
       return;
     }
 
     if (pending) {
-      if (pending.employee_id) {
-        sessionStorage.setItem('nexusEmployeeId', pending.employee_id);
-        localStorage.setItem('nexusEmployeeId', pending.employee_id);
-      }
-      window.NEXUS?.navigate(`${SETUP_VIEW}?status=pending`);
+      sessionStorage.setItem('nexusRegistrationStatus', '承認待ち');
+      navigate(SETUP_VIEW, '#setup');
       return;
     }
 
-    window.NEXUS?.navigate(SETUP_VIEW);
+    sessionStorage.setItem('nexusRegistrationStatus', '未登録');
+    navigate(SETUP_VIEW, '#setup');
   }
 
   async function authenticate(doc) {
@@ -133,13 +161,13 @@
     googleBtn.replaceWith(fresh);
     fresh.addEventListener('click', event => {
       event.preventDefault();
-      event.stopPropagation();
+      event.stopImmediatePropagation();
       authenticate(doc);
     }, true);
 
     const emailInput = doc.getElementById('emailInput');
-    const emailRow = emailInput?.closest('.field, .form-group, .input-wrap, label, div');
-    if (emailRow) emailRow.style.display = 'none';
+    const emailBlock = emailInput?.closest('.field, .form-group, .input-wrap, label');
+    if (emailBlock) emailBlock.style.display = 'none';
     else if (emailInput) emailInput.style.display = 'none';
 
     const emailBtn = doc.getElementById('loginBtn') || doc.getElementById('emailBtn');
@@ -154,10 +182,39 @@
     });
   }
 
+  function patchCompanyNames(doc) {
+    if (!doc) return;
+    const walker = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const value = node.nodeValue || '';
+      const next = value
+        .replace(/ITキャリアアップシステム/g, '株式会社がんばる')
+        .replace(/ITキャリア/g, '株式会社がんばる')
+        .replace(/\bITC\b/g, 'GANBARU')
+        .replace(/\bHR COMPANY\b/g, 'HR COMPANY株式会社');
+      if (next !== value) node.nodeValue = next;
+    }
+    const companyValue = doc.getElementById('companyValue');
+    if (companyValue?.dataset?.id === 'ITC') companyValue.dataset.id = 'GANBARU';
+  }
+
+  function neutralizeStaticSamples(doc, key) {
+    if (!doc) return;
+    if (key === 'application') {
+      const month = doc.getElementById('monthValue');
+      if (month && /2026.*06/.test(month.textContent || '')) month.textContent = '';
+    }
+  }
+
   function scan() {
     document.querySelectorAll('#nexus-root iframe').forEach(frame => {
       try {
         const doc = frame.contentDocument;
+        const key = frame.contentWindow?.__NEXUS_VIEW_KEY || '';
+        patchCompanyNames(doc);
+        neutralizeStaticSamples(doc, key);
         if (doc?.getElementById('googleBtn')) makeGoogleOnly(doc);
       } catch (_) {}
       if (!frame.dataset.nexusOverrideListener) {
@@ -165,6 +222,9 @@
         frame.addEventListener('load', () => {
           try {
             const doc = frame.contentDocument;
+            const key = frame.contentWindow?.__NEXUS_VIEW_KEY || '';
+            patchCompanyNames(doc);
+            neutralizeStaticSamples(doc, key);
             if (doc?.getElementById('googleBtn')) makeGoogleOnly(doc);
           } catch (_) {}
         });
@@ -174,6 +234,8 @@
 
   function forceLoginWhenUnauthenticated() {
     if (sessionStorage.getItem(TOKEN_KEY)) return;
+    clearEmployeeState();
+    clearLegacySampleState();
     const started = Date.now();
     const timer = setInterval(() => {
       if (window.NEXUS?.navigate) {
