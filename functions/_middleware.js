@@ -71,16 +71,31 @@ function injectBeforeBodyEnd(html, scripts) {
   return bodyIndex >= 0 ? html.slice(0, bodyIndex) + scripts.join('') + html.slice(bodyIndex) : html + scripts.join('');
 }
 
+function looksLikeAdminHtml(html) {
+  return html.includes('id="globalCompanySwitch"') ||
+    html.includes('ADMIN CONSOLE') ||
+    html.includes('adminLoginScreen') ||
+    html.includes('NEXUS ONE Admin');
+}
+
+function looksLikeStaffHtml(html) {
+  return html.includes('id="nexus-root"') || html.includes('__NEXUS_VIEW_KEY');
+}
+
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const response = await context.next();
-  const isStaffShell = url.pathname === '/' || url.pathname === '/index.html';
-  const isAdminShell = url.pathname === '/admin.html';
-  if (!isStaffShell && !isAdminShell) return response;
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/html')) return response;
 
   let html = await response.text();
+  const adminByPath = url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html';
+  const adminByContent = looksLikeAdminHtml(html);
+  const isAdminShell = adminByPath || adminByContent;
+  const isStaffShell = !isAdminShell && ((url.pathname === '/' || url.pathname === '/index.html') || looksLikeStaffHtml(html));
+
+  if (!isStaffShell && !isAdminShell) return response;
+
   const scripts = [];
 
   if (isStaffShell) {
@@ -107,6 +122,6 @@ export async function onRequest(context) {
   html = injectBeforeBodyEnd(html, scripts);
   const headers = new Headers(response.headers);
   headers.delete('content-length');
-  headers.set('cache-control', 'no-store');
+  headers.set('cache-control', 'no-store, no-cache, must-revalidate');
   return new Response(html, { status: response.status, statusText: response.statusText, headers });
 }
