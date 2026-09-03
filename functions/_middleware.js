@@ -124,6 +124,9 @@ export async function onRequest(context) {
     if (!html.includes('/nexus-admin-runtime.js')) {
       scripts.push('<script src="/nexus-admin-runtime.js"></script>');
     }
+    if (!html.includes('/nexus-admin-actions.js')) {
+      scripts.push('<script src="/nexus-admin-actions.js"></script>');
+    }
   }
 
   html = injectBeforeBodyEnd(html, scripts);
