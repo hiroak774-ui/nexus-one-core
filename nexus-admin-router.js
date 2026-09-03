@@ -17,9 +17,13 @@
     return (location.hash || '').replace(/^#/, '') || 'entry';
   }
 
-  async function fetchJson(url) {
+  async function fetchJson(url, options = {}) {
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token()}` },
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token()}`,
+        ...(options.headers || {})
+      },
       cache: 'no-store'
     });
     const payload = await response.json().catch(() => ({}));
@@ -34,7 +38,7 @@
 
     checking = true;
     try {
-      const me = await fetchJson(ME_URL);
+      let me = await fetchJson(ME_URL);
       if (!me || me.authState !== 'approved') return;
 
       if (me.permissions?.canOpenAdmin) {
@@ -43,7 +47,16 @@
       }
 
       const bootstrap = await fetchJson(BOOTSTRAP_URL);
-      if (bootstrap?.bootstrapAvailable) {
+      if (!bootstrap?.bootstrapAvailable) return;
+
+      const created = await fetchJson(BOOTSTRAP_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' }
+      });
+      if (!created) return;
+
+      me = await fetchJson(ME_URL);
+      if (me?.permissions?.canOpenAdmin) {
         location.replace('/admin.html');
       }
     } catch (error) {
