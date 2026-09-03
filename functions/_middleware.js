@@ -56,41 +56,63 @@ const SETUP_SCROLL_FIX = `<script>
 })();
 </script>`;
 
+function injectBeforeBodyEnd(html, scripts) {
+  if (!scripts.length) return html;
+  const lower = html.toLowerCase();
+  const bodyIndex = lower.lastIndexOf('</body>');
+  return bodyIndex >= 0
+    ? html.slice(0, bodyIndex) + scripts.join('') + html.slice(bodyIndex)
+    : html + scripts.join('');
+}
+
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const response = await context.next();
+  const isStaffShell = url.pathname === '/' || url.pathname === '/index.html';
+  const isAdminShell = url.pathname === '/admin.html';
 
-  if (url.pathname !== '/' && url.pathname !== '/index.html') {
-    return response;
-  }
+  if (!isStaffShell && !isAdminShell) return response;
 
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/html')) return response;
 
   let html = await response.text();
-  html = sanitizeLegacyStaffShell(html);
-
   const scripts = [];
-  if (!html.includes('/nexus-auth-client.js')) {
-    scripts.push('<script src="/nexus-auth-client.js"></script>');
-  }
-  if (!html.includes('/nexus-staff-profile.js')) {
-    scripts.push('<script src="/nexus-staff-profile.js"></script>');
-  }
-  if (!html.includes('/nexus-staff-runtime.js')) {
-    scripts.push('<script src="/nexus-staff-runtime.js"></script>');
-  }
-  if (!html.includes('nexusSetupScrollBound')) {
-    scripts.push(SETUP_SCROLL_FIX);
+
+  if (isStaffShell) {
+    html = sanitizeLegacyStaffShell(html);
+
+    if (!html.includes('/nexus-auth-client.js')) {
+      scripts.push('<script src="/nexus-auth-client.js"></script>');
+    }
+    if (!html.includes('/nexus-staff-profile.js')) {
+      scripts.push('<script src="/nexus-staff-profile.js"></script>');
+    }
+    if (!html.includes('/nexus-staff-runtime.js')) {
+      scripts.push('<script src="/nexus-staff-runtime.js"></script>');
+    }
+    if (!html.includes('/nexus-admin-router.js')) {
+      scripts.push('<script src="/nexus-admin-router.js"></script>');
+    }
+    if (!html.includes('nexusSetupScrollBound')) {
+      scripts.push(SETUP_SCROLL_FIX);
+    }
   }
 
-  if (scripts.length) {
-    const lower = html.toLowerCase();
-    const bodyIndex = lower.lastIndexOf('</body>');
-    html = bodyIndex >= 0
-      ? html.slice(0, bodyIndex) + scripts.join('') + html.slice(bodyIndex)
-      : html + scripts.join('');
+  if (isAdminShell) {
+    if (!html.includes('id="nexusAdminAuthHide"')) {
+      const style = '<style id="nexusAdminAuthHide">html{visibility:hidden!important}</style>';
+      const headIndex = html.toLowerCase().indexOf('</head>');
+      html = headIndex >= 0
+        ? html.slice(0, headIndex) + style + html.slice(headIndex)
+        : style + html;
+    }
+    if (!html.includes('/nexus-admin-auth.js')) {
+      scripts.push('<script src="/nexus-admin-auth.js"></script>');
+    }
   }
+
+  html = injectBeforeBodyEnd(html, scripts);
 
   const headers = new Headers(response.headers);
   headers.delete('content-length');
