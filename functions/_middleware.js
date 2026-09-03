@@ -18,6 +18,10 @@ function sanitizeLegacyStaffShell(html) {
 function sanitizeLegacyAdminShell(html) {
   return html
     .replaceAll(LEGACY_GAS_URL, '')
+    .replaceAll('loadAdminInitialData({silent:true});', 'void 0;')
+    .replaceAll('loadAdminInitialData({ silent:true });', 'void 0;')
+    .replaceAll('loadAdminInitialData();', 'void 0;')
+    .replaceAll('loadAdminInitialData()', 'Promise.resolve()')
     .replace(/ITキャリアアップシステム/g, '株式会社がんばる')
     .replace(/ITキャリア/g, '株式会社がんばる')
     .replace(/\bITC\b/g, 'GANBARU')
@@ -31,14 +35,11 @@ const SETUP_SCROLL_FIX = `<script>
       const win = frame.contentWindow;
       const doc = frame.contentDocument;
       if (!doc || win?.__NEXUS_VIEW_KEY !== 'setup') return;
-
       const content = doc.getElementById('setupContent') || doc.querySelector('.content');
       if (!content) return;
-
       doc.documentElement.style.height = '100%';
       doc.body.style.height = '100%';
       doc.body.style.overflow = 'hidden';
-
       content.style.height = '100%';
       content.style.minHeight = '0';
       content.style.overflowX = 'hidden';
@@ -49,7 +50,6 @@ const SETUP_SCROLL_FIX = `<script>
       content.style.paddingBottom = 'calc(36px + env(safe-area-inset-bottom))';
     } catch (_) {}
   }
-
   function scan() {
     document.querySelectorAll('#nexus-root iframe').forEach(frame => {
       fixSetupScroll(frame);
@@ -58,7 +58,6 @@ const SETUP_SCROLL_FIX = `<script>
       frame.addEventListener('load', () => fixSetupScroll(frame));
     });
   }
-
   new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('DOMContentLoaded', scan);
   scan();
@@ -69,9 +68,7 @@ function injectBeforeBodyEnd(html, scripts) {
   if (!scripts.length) return html;
   const lower = html.toLowerCase();
   const bodyIndex = lower.lastIndexOf('</body>');
-  return bodyIndex >= 0
-    ? html.slice(0, bodyIndex) + scripts.join('') + html.slice(bodyIndex)
-    : html + scripts.join('');
+  return bodyIndex >= 0 ? html.slice(0, bodyIndex) + scripts.join('') + html.slice(bodyIndex) : html + scripts.join('');
 }
 
 export async function onRequest(context) {
@@ -79,9 +76,7 @@ export async function onRequest(context) {
   const response = await context.next();
   const isStaffShell = url.pathname === '/' || url.pathname === '/index.html';
   const isAdminShell = url.pathname === '/admin.html';
-
   if (!isStaffShell && !isAdminShell) return response;
-
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/html')) return response;
 
@@ -90,54 +85,28 @@ export async function onRequest(context) {
 
   if (isStaffShell) {
     html = sanitizeLegacyStaffShell(html);
-
-    if (!html.includes('/nexus-auth-client.js')) {
-      scripts.push('<script src="/nexus-auth-client.js"></script>');
-    }
-    if (!html.includes('/nexus-staff-profile.js')) {
-      scripts.push('<script src="/nexus-staff-profile.js"></script>');
-    }
-    if (!html.includes('/nexus-staff-runtime.js')) {
-      scripts.push('<script src="/nexus-staff-runtime.js"></script>');
-    }
-    if (!html.includes('/nexus-admin-router.js')) {
-      scripts.push('<script src="/nexus-admin-router.js"></script>');
-    }
-    if (!html.includes('nexusSetupScrollBound')) {
-      scripts.push(SETUP_SCROLL_FIX);
-    }
+    if (!html.includes('/nexus-auth-client.js')) scripts.push('<script src="/nexus-auth-client.js"></script>');
+    if (!html.includes('/nexus-staff-profile.js')) scripts.push('<script src="/nexus-staff-profile.js"></script>');
+    if (!html.includes('/nexus-staff-runtime.js')) scripts.push('<script src="/nexus-staff-runtime.js"></script>');
+    if (!html.includes('/nexus-admin-router.js')) scripts.push('<script src="/nexus-admin-router.js"></script>');
+    if (!html.includes('nexusSetupScrollBound')) scripts.push(SETUP_SCROLL_FIX);
   }
 
   if (isAdminShell) {
     html = sanitizeLegacyAdminShell(html);
-
     if (!html.includes('id="nexusAdminAuthHide"')) {
       const style = '<style id="nexusAdminAuthHide">html{visibility:hidden!important}</style>';
       const headIndex = html.toLowerCase().indexOf('</head>');
-      html = headIndex >= 0
-        ? html.slice(0, headIndex) + style + html.slice(headIndex)
-        : style + html;
+      html = headIndex >= 0 ? html.slice(0, headIndex) + style + html.slice(headIndex) : style + html;
     }
-    if (!html.includes('/nexus-admin-auth.js')) {
-      scripts.push('<script src="/nexus-admin-auth.js"></script>');
-    }
-    if (!html.includes('/nexus-admin-runtime.js')) {
-      scripts.push('<script src="/nexus-admin-runtime.js"></script>');
-    }
-    if (!html.includes('/nexus-admin-actions.js')) {
-      scripts.push('<script src="/nexus-admin-actions.js"></script>');
-    }
+    if (!html.includes('/nexus-admin-auth.js')) scripts.push('<script src="/nexus-admin-auth.js"></script>');
+    if (!html.includes('/nexus-admin-runtime.js')) scripts.push('<script src="/nexus-admin-runtime.js"></script>');
+    if (!html.includes('/nexus-admin-actions.js')) scripts.push('<script src="/nexus-admin-actions.js"></script>');
   }
 
   html = injectBeforeBodyEnd(html, scripts);
-
   const headers = new Headers(response.headers);
   headers.delete('content-length');
   headers.set('cache-control', 'no-store');
-
-  return new Response(html, {
-    status: response.status,
-    statusText: response.statusText,
-    headers
-  });
+  return new Response(html, { status: response.status, statusText: response.statusText, headers });
 }
