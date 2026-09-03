@@ -15,6 +15,15 @@ function sanitizeLegacyStaffShell(html) {
     .replace(/HR COMPANY(?!株式会社)/g, 'HR COMPANY株式会社');
 }
 
+function sanitizeLegacyAdminShell(html) {
+  return html
+    .replaceAll(LEGACY_GAS_URL, '')
+    .replace(/ITキャリアアップシステム/g, '株式会社がんばる')
+    .replace(/ITキャリア/g, '株式会社がんばる')
+    .replace(/\bITC\b/g, 'GANBARU')
+    .replace(/HR COMPANY(?!株式会社)/g, 'HR COMPANY株式会社');
+}
+
 const SETUP_SCROLL_FIX = `<script>
 (() => {
   function fixSetupScroll(frame) {
@@ -100,6 +109,8 @@ export async function onRequest(context) {
   }
 
   if (isAdminShell) {
+    html = sanitizeLegacyAdminShell(html);
+
     if (!html.includes('id="nexusAdminAuthHide"')) {
       const style = '<style id="nexusAdminAuthHide">html{visibility:hidden!important}</style>';
       const headIndex = html.toLowerCase().indexOf('</head>');
@@ -109,6 +120,9 @@ export async function onRequest(context) {
     }
     if (!html.includes('/nexus-admin-auth.js')) {
       scripts.push('<script src="/nexus-admin-auth.js"></script>');
+    }
+    if (!html.includes('/nexus-admin-runtime.js')) {
+      scripts.push('<script src="/nexus-admin-runtime.js"></script>');
     }
   }
 
