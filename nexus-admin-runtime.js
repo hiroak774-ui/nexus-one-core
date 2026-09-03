@@ -1,6 +1,7 @@
 (() => {
   const TOKEN_KEY = 'nexusGoogleAccessToken';
   const DATA_URL = '/api/admin/data';
+  const EMPLOYEES_URL = '/api/admin/employees';
   let loading = false;
   let installed = false;
 
@@ -35,6 +36,63 @@
     const status = document.querySelector('.admin-status');
     if (name) name.textContent = admin.name || admin.email || '管理者';
     if (status) status.textContent = admin.role || '管理者';
+  }
+
+  function normalizeCompanyId(value) {
+    return value === 'ITC' ? 'GANBARU' : value;
+  }
+
+  function officialCompanyName(companyId, fallback = '') {
+    if (companyId === 'HRC') return 'HR COMPANY株式会社';
+    if (companyId === 'GANBARU') return '株式会社がんばる';
+    return fallback || companyId || '';
+  }
+
+  function normalizeEmployee(employee = {}) {
+    const companyId = normalizeCompanyId(employee.companyId);
+    return {
+      ...employee,
+      companyId,
+      company: officialCompanyName(companyId, employee.company)
+    };
+  }
+
+  function setCompanySwitch(companies = []) {
+    const select = document.getElementById('globalCompanySwitch');
+    if (!select) return;
+
+    const normalized = [];
+    const seen = new Set();
+    for (const row of companies || []) {
+      const companyId = normalizeCompanyId(row.companyId || row.company_id);
+      if (!companyId || seen.has(companyId)) continue;
+      seen.add(companyId);
+      normalized.push({
+        companyId,
+        companyName: officialCompanyName(companyId, row.companyName || row.company_name)
+      });
+    }
+
+    if (!normalized.some(row => row.companyId === 'HRC')) {
+      normalized.push({ companyId:'HRC', companyName:'HR COMPANY株式会社' });
+    }
+    if (!normalized.some(row => row.companyId === 'GANBARU')) {
+      normalized.push({ companyId:'GANBARU', companyName:'株式会社がんばる' });
+    }
+
+    select.innerHTML = [
+      '<option value="all">2社まとめて表示</option>',
+      ...normalized
+        .filter(row => row.companyId === 'HRC' || row.companyId === 'GANBARU')
+        .sort((a,b) => (a.companyId === 'HRC' ? -1 : b.companyId === 'HRC' ? 1 : 0))
+        .map(row => `<option value="${row.companyId}">${row.companyName}</option>`)
+    ].join('');
+
+    if (typeof activeCompanyId !== 'undefined') {
+      activeCompanyId = normalizeCompanyId(activeCompanyId);
+      if (!['all','HRC','GANBARU'].includes(activeCompanyId)) activeCompanyId = 'all';
+      select.value = activeCompanyId;
+    }
   }
 
   function workText(minutes) {
@@ -78,13 +136,10 @@
     return rows;
   }
 
-  async function fetchData() {
+  async function fetchJson(url) {
     const accessToken = token();
     if (!accessToken) throw new Error('ログイン情報がありません。');
-    const year = Number(typeof attCurrentYear !== 'undefined' ? attCurrentYear : new Date().getFullYear());
-    const monthIndex = Number(typeof attCurrentMonth !== 'undefined' ? attCurrentMonth : new Date().getMonth());
-    const query = new URLSearchParams({year:String(year),month:String(monthIndex+1)});
-    const response = await fetch(`${DATA_URL}?${query}`, {headers:{Authorization:`Bearer ${accessToken}`},cache:'no-store'});
+    const response = await fetch(url, { headers:{Authorization:`Bearer ${accessToken}`}, cache:'no-store' });
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401 || response.status === 403) {
       location.replace('/index.html#login');
@@ -92,6 +147,22 @@
     }
     if (!response.ok || !payload.ok) throw new Error(payload.error || '管理画面データを取得できませんでした。');
     return payload.data;
+  }
+
+  async function fetchData() {
+    const year = Number(typeof attCurrentYear !== 'undefined' ? attCurrentYear : new Date().getFullYear());
+    const monthIndex = Number(typeof attCurrentMonth !== 'undefined' ? attCurrentMonth : new Date().getMonth());
+    const query = new URLSearchParams({year:String(year),month:String(monthIndex+1)});
+    const [data, employeeData] = await Promise.all([
+      fetchJson(`${DATA_URL}?${query}`),
+      fetchJson(EMPLOYEES_URL)
+    ]);
+
+    return {
+      ...data,
+      employees: { rows:(employeeData?.rows || []).map(normalizeEmployee) },
+      companies: employeeData?.companies || data?.companies || []
+    };
   }
 
   async function loadD1(options = {}) {
@@ -103,6 +174,7 @@
       if (!silent) document.body.classList.add('admin-loading');
       const data = await fetchData();
       setAdminProfile(data.admin || {});
+      setCompanySwitch(data.companies || []);
       if (typeof applyAdminDashboardData === 'function') applyAdminDashboardData(data.dashboard || {summary:{},todayRows:[],timeline:[]});
       if (typeof applyAdminAttendanceData === 'function') applyAdminAttendanceData(data.attendance || {rows:[]});
       if (typeof applyAdminApplicationsData === 'function') applyAdminApplicationsData(data.applications || {rows:[]});
@@ -110,6 +182,8 @@
       if (typeof applyAdminWorkPatternsData === 'function') applyAdminWorkPatternsData(data.workPatterns || {rows:[]});
       if (typeof setUpdatedAtNow === 'function') setUpdatedAtNow();
       if (typeof render === 'function') render();
+      setCompanySwitch(data.companies || []);
+      if (typeof renderEmployeeRows === 'function') renderEmployeeRows();
       document.body.classList.remove('admin-loading','auth-locked');
       hideLegacyAuth();
     } catch (error) {
@@ -134,7 +208,13 @@
       attCurrentMonth = now.getMonth();
       appCurrentYear = now.getFullYear();
       appCurrentMonth = now.getMonth();
+      activeCompanyId = normalizeCompanyId(activeCompanyId);
+      if (!['all','HRC','GANBARU'].includes(activeCompanyId)) activeCompanyId = 'all';
     } catch (_) {}
+    setCompanySwitch([
+      {companyId:'HRC',companyName:'HR COMPANY株式会社'},
+      {companyId:'GANBARU',companyName:'株式会社がんばる'}
+    ]);
     clearSamples();
     window.loadAdminInitialData = loadD1;
     window.refreshAdminData = () => loadD1({silent:true});
