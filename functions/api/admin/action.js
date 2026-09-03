@@ -8,6 +8,19 @@ async function loadEmployee(db, employeeId) {
   return db.prepare(`SELECT e.*, u.user_id FROM employees e JOIN users u ON u.user_id=e.user_id WHERE e.employee_id=? LIMIT 1`).bind(employeeId).first();
 }
 
+async function ensureClosures(db) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS monthly_attendance_closures (
+      employee_id TEXT NOT NULL,
+      target_month TEXT NOT NULL,
+      closed_by_user_id TEXT NOT NULL,
+      closed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(employee_id,target_month)
+    )
+  `).run();
+}
+
 export async function onRequestPost({ request, env }) {
   try {
     const ctx = await requireAdmin(request, env);
@@ -24,7 +37,7 @@ export async function onRequestPost({ request, env }) {
       return jsonResponse({ok:true,data:{applicationId:row.application_id,status:next}});
     }
 
-    if (['updateEmployee','setEmployeeAccount','retireEmployee','approveEmployee'].includes(action)) {
+    if (['updateEmployee','setEmployeeAccount','retireEmployee','approveEmployee','sendAttendanceCheckRequest','closeMonthlyAttendance'].includes(action)) {
       const e = await loadEmployee(env.DB, body.employeeId);
       if (!e || !(await canManageCompany(ctx,e.company_id))) return jsonResponse({ok:false,error:'Employee not found'},404);
 
@@ -37,6 +50,18 @@ export async function onRequestPost({ request, env }) {
       } else if (action === 'retireEmployee') {
         await env.DB.prepare(`UPDATE employees SET employment_status='退職', retired_on=COALESCE(retired_on,date('now')), updated_at=CURRENT_TIMESTAMP WHERE employee_id=?`).bind(e.employee_id).run();
         await env.DB.prepare(`UPDATE users SET account_status='無効', updated_at=CURRENT_TIMESTAMP WHERE user_id=?`).bind(e.user_id).run();
+      } else if (action === 'sendAttendanceCheckRequest') {
+        const notificationId = `NTF_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+        await env.DB.prepare(`INSERT INTO notifications(notification_id,company_id,user_id,employee_id,notification_type,title,body,related_type,related_id,is_read,created_at) VALUES(?,?,?,?,?,'勤怠確認のお願い',?,'attendance',?,0,CURRENT_TIMESTAMP)`)
+          .bind(notificationId,e.company_id,e.user_id,e.employee_id,'勤怠確認',String(body.message||'勤怠内容をご確認ください。'),String(body.relatedId||'')).run();
+        return jsonResponse({ok:true,data:{notificationId}});
+      } else if (action === 'closeMonthlyAttendance') {
+        const month = String(body.month || '');
+        if (!/^\d{4}-\d{2}$/.test(month)) return jsonResponse({ok:false,error:'Invalid target month'},400);
+        await ensureClosures(env.DB);
+        await env.DB.prepare(`INSERT INTO monthly_attendance_closures(employee_id,target_month,closed_by_user_id,closed_at,updated_at) VALUES(?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(employee_id,target_month) DO UPDATE SET closed_by_user_id=excluded.closed_by_user_id,closed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP`)
+          .bind(e.employee_id,month,ctx.user.user_id).run();
+        return jsonResponse({ok:true,data:{employeeId:e.employee_id,month}});
       } else {
         const companyId = ['HRC','GANBARU'].includes(body.companyId) ? body.companyId : e.company_id;
         if (!(await canManageCompany(ctx,companyId))) return jsonResponse({ok:false,error:'Company permission is required'},403);
