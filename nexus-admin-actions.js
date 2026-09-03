@@ -34,6 +34,19 @@
 
     try { adminHasApi = () => true; } catch (_) {}
 
+    const visibleEmployees = () => employees.filter(employee => employee.employment !== '退職' && (activeCompanyId === 'all' || employee.companyId === activeCompanyId));
+    const employeeStatusLabel = employee => {
+      if (employee.registration === '承認待ち') return '承認待ち';
+      if (employee.registration === '差戻し') return '差戻し';
+      if (employee.registration === '却下') return '却下';
+      return employee.account === '有効' ? '利用中' : '停止中';
+    };
+    const employeeStatusClass = employee => employee.registration === '承認済' ? (employee.account === '有効' ? 'green' : 'orange') : 'orange';
+    window.empVisibleBase = visibleEmployees;
+    window.empStatusLabel = employeeStatusLabel;
+    window.empStatusClass = employeeStatusClass;
+    try { empVisibleBase=visibleEmployees; empStatusLabel=employeeStatusLabel; empStatusClass=employeeStatusClass; } catch (_) {}
+
     const syncApplication = async (id, nextStatus, comment) => {
       const result = await post('updateApplicationStatus', { applicationId:id, status:nextStatus, comment });
       await reload();
@@ -57,9 +70,7 @@
     window.adminSyncEmployee = syncEmployee;
     try { adminSyncEmployee = syncEmployee; } catch (_) {}
 
-    const syncAttendanceRequest = async (employee, message, dayLabel) => {
-      return post('sendAttendanceCheckRequest', { employeeId:employee.id, message, relatedId:dayLabel || '' });
-    };
+    const syncAttendanceRequest = async (employee, message, dayLabel) => post('sendAttendanceCheckRequest', { employeeId:employee.id, message, relatedId:dayLabel || '' });
     window.adminSyncAttendanceRequest = syncAttendanceRequest;
     try { adminSyncAttendanceRequest = syncAttendanceRequest; } catch (_) {}
 
@@ -129,6 +140,8 @@
     };
     window.retireEmployee = d1RetireEmployee;
     try { retireEmployee = d1RetireEmployee; } catch (_) {}
+
+    if (typeof renderEmployeeRows === 'function') renderEmployeeRows();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, {once:true});
