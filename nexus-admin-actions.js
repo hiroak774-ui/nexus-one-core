@@ -12,10 +12,7 @@
     if (!accessToken) throw new Error('ログイン情報がありません。');
     const response = await fetch(ACTION_URL, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'content-type': 'application/json'
-      },
+      headers: { Authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
       body: JSON.stringify({ action, ...payload })
     });
     const data = await response.json().catch(() => ({}));
@@ -47,27 +44,31 @@
 
     const syncEmployee = async employee => {
       const result = await post('updateEmployee', {
-        employeeId: employee.id,
-        name: employee.name,
-        email: employee.email,
-        companyId: employee.companyId,
-        roleId: employee.roleId === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : employee.roleId,
-        account: employee.account,
-        workType: employee.type,
-        pattern: employee.pattern,
-        paidTotal: employee.paidTotal,
-        paidUsed: employee.paidUsed,
-        joined: employee.joined,
-        postalCode: employee.postalCode || '',
-        address: employee.address || '',
-        building: employee.building || '',
-        clientName: employee.clientName || ''
+        employeeId:employee.id, name:employee.name, email:employee.email, companyId:employee.companyId,
+        roleId:employee.roleId === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : employee.roleId,
+        account:employee.account, workType:employee.type, pattern:employee.pattern,
+        paidTotal:employee.paidTotal, paidUsed:employee.paidUsed, joined:employee.joined,
+        postalCode:employee.postalCode || '', address:employee.address || '', building:employee.building || '',
+        clientName:employee.clientName || ''
       });
       await reload();
       return result;
     };
     window.adminSyncEmployee = syncEmployee;
     try { adminSyncEmployee = syncEmployee; } catch (_) {}
+
+    const syncAttendanceRequest = async (employee, message, dayLabel) => {
+      return post('sendAttendanceCheckRequest', { employeeId:employee.id, message, relatedId:dayLabel || '' });
+    };
+    window.adminSyncAttendanceRequest = syncAttendanceRequest;
+    try { adminSyncAttendanceRequest = syncAttendanceRequest; } catch (_) {}
+
+    const syncCloseMonthly = async employee => {
+      const month = `${attCurrentYear}-${String(attCurrentMonth + 1).padStart(2,'0')}`;
+      return post('closeMonthlyAttendance', { employeeId:employee.id, month });
+    };
+    window.adminSyncCloseMonthly = syncCloseMonthly;
+    try { adminSyncCloseMonthly = syncCloseMonthly; } catch (_) {}
 
     const originalDetail = employeeDetailHtml;
     const d1EmployeeDetail = employee => {
@@ -80,9 +81,7 @@
 
     window.nexusApproveEmployee = async employeeId => {
       try {
-        const ok = typeof modal === 'function'
-          ? await modal('登録を承認しますか', '承認後、この社員はスタッフ画面を利用できます。', '承認')
-          : true;
+        const ok = typeof modal === 'function' ? await modal('登録を承認しますか','承認後、この社員はスタッフ画面を利用できます。','承認') : true;
         if (!ok) return;
         await post('approveEmployee', { employeeId });
         if (typeof closeDrawer === 'function') closeDrawer();
@@ -98,9 +97,7 @@
       const employee = employees.find(item => item.id === id);
       if (!employee) return;
       const next = employee.account === '有効' ? '無効' : '有効';
-      const ok = typeof modal === 'function'
-        ? await modal(next === '無効' ? '利用を停止しますか' : '利用を再開しますか', `${employee.name} さんのアカウント状態を変更します。`, '実行')
-        : true;
+      const ok = typeof modal === 'function' ? await modal(next === '無効' ? '利用を停止しますか' : '利用を再開しますか',`${employee.name} さんのアカウント状態を変更します。`,'実行') : true;
       if (!ok) return;
       try {
         await post('setEmployeeAccount', { employeeId:id, account:next });
@@ -118,9 +115,7 @@
     const d1RetireEmployee = async id => {
       const employee = employees.find(item => item.id === id);
       if (!employee) return;
-      const ok = typeof modal === 'function'
-        ? await modal('退職扱いにしますか', `${employee.name} さんを退職扱いにします。過去データは保持します。`, '退職扱い')
-        : true;
+      const ok = typeof modal === 'function' ? await modal('退職扱いにしますか',`${employee.name} さんを退職扱いにします。過去データは保持します。`,'退職扱い') : true;
       if (!ok) return;
       try {
         await post('retireEmployee', { employeeId:id });
