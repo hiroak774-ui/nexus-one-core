@@ -5,237 +5,26 @@
   let loading = false;
   let installed = false;
 
-  function token() {
-    try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (_) { return ''; }
-  }
+  function token(){try{return sessionStorage.getItem(TOKEN_KEY)||''}catch(_){return''}}
+  function reveal(){document.getElementById('nexusAdminAuthHide')?.remove();document.documentElement.style.visibility=''}
+  function hideLegacyAuth(){document.body.classList.remove('auth-locked');const login=document.getElementById('adminLoginScreen');const loadingScreen=document.getElementById('adminLoadingScreen');if(login)login.style.display='none';if(loadingScreen)loadingScreen.style.display='none'}
+  function clearSamples(){try{if(typeof clearAdminRuntimeData==='function')clearAdminRuntimeData();if(typeof applyAdminDashboardData==='function')applyAdminDashboardData({summary:{working:0,completed:0,notClocked:0,pendingApplications:0},todayRows:[],timeline:[]});if(typeof applyAdminAttendanceData==='function')applyAdminAttendanceData({rows:[]});if(typeof applyAdminApplicationsData==='function')applyAdminApplicationsData({rows:[]});if(typeof applyAdminEmployeesData==='function')applyAdminEmployeesData({rows:[]});if(typeof applyAdminWorkPatternsData==='function')applyAdminWorkPatternsData({rows:[]})}catch(error){console.error('[NEXUS admin clear]',error)}}
+  function showFatal(error){clearSamples();document.body.classList.remove('admin-loading','auth-locked');reveal();document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#071127;color:#e5f0ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans JP',sans-serif"><div style="width:min(620px,100%);padding:28px;border:1px solid rgba(148,163,184,.22);border-radius:24px;background:rgba(15,23,42,.78)"><div style="font-size:11px;font-weight:900;letter-spacing:.14em;color:#7dd3fc">NEXUS ONE / D1</div><h1 style="font-size:22px;margin:12px 0">管理データを取得できませんでした</h1><p style="color:#94a3b8;line-height:1.8">旧データにはフォールバックしていません。D1 APIのエラーを確認してください。</p><div style="margin-top:16px;padding:14px;border-radius:14px;background:rgba(239,68,68,.08);color:#fecaca;font-size:12px;word-break:break-word">${String(error?.message||error||'Unknown error').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}</div><button onclick="location.reload()" style="margin-top:18px;height:42px;padding:0 18px;border:0;border-radius:12px;background:#2563eb;color:white;font-weight:800;cursor:pointer">再読み込み</button></div></div>`}
+  function setAdminProfile(admin={}){const name=document.querySelector('.admin-name');const status=document.querySelector('.admin-status');if(name)name.textContent=admin.name||admin.email||'管理者';if(status)status.textContent=admin.role||'管理者'}
+  function normalizeCompanyId(value){return value==='ITC'?'GANBARU':value}
+  function officialCompanyName(companyId,fallback=''){if(companyId==='HRC')return'HR COMPANY株式会社';if(companyId==='GANBARU')return'株式会社がんばる';return fallback||companyId||''}
+  function normalizeEmployee(employee={}){const companyId=normalizeCompanyId(employee.companyId);return{...employee,companyId,company:officialCompanyName(companyId,employee.company)}}
+  function setCompanySwitch(companies=[]){const select=document.getElementById('globalCompanySwitch');if(!select)return;const normalized=[];const seen=new Set();for(const row of companies||[]){const companyId=normalizeCompanyId(row.companyId||row.company_id);if(!companyId||seen.has(companyId))continue;seen.add(companyId);normalized.push({companyId,companyName:officialCompanyName(companyId,row.companyName||row.company_name)})}if(!seen.has('HRC'))normalized.push({companyId:'HRC',companyName:'HR COMPANY株式会社'});if(!seen.has('GANBARU'))normalized.push({companyId:'GANBARU',companyName:'株式会社がんばる'});select.innerHTML='<option value="all">2社まとめて表示</option>'+normalized.filter(r=>['HRC','GANBARU'].includes(r.companyId)).sort((a,b)=>a.companyId==='HRC'?-1:b.companyId==='HRC'?1:0).map(r=>`<option value="${r.companyId}">${r.companyName}</option>`).join('');try{activeCompanyId=normalizeCompanyId(activeCompanyId);if(!['all','HRC','GANBARU'].includes(activeCompanyId))activeCompanyId='all';select.value=activeCompanyId}catch(_){select.value='all'}}
+  function workText(minutes){const n=Number(minutes||0);if(!n)return'-';const h=Math.floor(n/60),m=n%60;return m?`${h}h ${m}m`:`${h}h`}
+  function d1DailyRows(employee){const lastDay=new Date(attCurrentYear,attCurrentMonth+1,0).getDate(),weekNames=['日','月','火','水','木','金','土'],pad=n=>String(n).padStart(2,'0');const records=new Map((Array.isArray(employee?.dailyRecords)?employee.dailyRecords:[]).map(row=>[row.date,row]));const holidays=new Set(Array.isArray(employee?.holidays)?employee.holidays:[]),rows=[];for(let day=1;day<=lastDay;day++){const date=new Date(attCurrentYear,attCurrentMonth,day),iso=`${attCurrentYear}-${pad(attCurrentMonth+1)}-${pad(day)}`,week=weekNames[date.getDay()],record=records.get(iso);if(holidays.has(iso)){rows.push({d:`${pad(attCurrentMonth+1)}/${pad(day)}(${week})`,dayOnly:pad(day),iso,week,in:'休',out:'休',work:'-',main:'休日',tag:'blue',comment:'休日設定',workStyle:'-',clockInGps:false,clockOutGps:false,clockInArea:'-',clockOutArea:'-'});continue}if(!record){rows.push({d:`${pad(attCurrentMonth+1)}/${pad(day)}(${week})`,dayOnly:pad(day),iso,week,in:'-',out:'-',work:'-',main:'記録なし',tag:'',comment:'',workStyle:'-',clockInGps:false,clockOutGps:false,clockInArea:'-',clockOutArea:'-'});continue}const gpsMissing=(record.clockIn&&!record.clockInGps)||(record.clockOut&&!record.clockOutGps);rows.push({d:`${pad(attCurrentMonth+1)}/${pad(day)}(${week})`,dayOnly:pad(day),iso,week,in:record.clockIn||'-',out:record.clockOut||'-',work:workText(record.workMinutes),main:record.note?'要確認':gpsMissing?'位置情報未取得':'勤務',tag:(record.note||gpsMissing)?'orange':'green',comment:record.note||'',workStyle:record.workStyle||'-',clockInGps:record.clockInGps===true,clockOutGps:record.clockOutGps===true,clockInArea:record.clockInArea||(record.clockIn?'取得できませんでした':'-'),clockOutArea:record.clockOutArea||(record.clockOut?'取得できませんでした':'-')})}return rows}
 
-  function hideLegacyAuth() {
-    document.body.classList.remove('auth-locked');
-    const login = document.getElementById('adminLoginScreen');
-    const loadingScreen = document.getElementById('adminLoadingScreen');
-    if (login) login.style.display = 'none';
-    if (loadingScreen) loadingScreen.style.display = 'none';
-  }
+  async function fetchJson(url){const accessToken=token();if(!accessToken)throw new Error('ログイン情報がありません。');const response=await fetch(url,{headers:{Authorization:`Bearer ${accessToken}`},cache:'no-store'});const payload=await response.json().catch(()=>({}));if(response.status===401||response.status===403){location.replace('/#login');throw new Error(payload.error||'管理者権限を確認できませんでした。')}if(!response.ok||!payload.ok)throw new Error(`${url}: ${payload.error||`HTTP ${response.status}`}`);return payload.data}
+  async function fetchData(){const year=Number(typeof attCurrentYear!=='undefined'?attCurrentYear:new Date().getFullYear()),monthIndex=Number(typeof attCurrentMonth!=='undefined'?attCurrentMonth:new Date().getMonth()),query=new URLSearchParams({year:String(year),month:String(monthIndex+1)});const [data,employeeData]=await Promise.all([fetchJson(`${DATA_URL}?${query}`),fetchJson(EMPLOYEES_URL)]);return{...data,employees:{rows:(employeeData?.rows||[]).map(normalizeEmployee)},companies:employeeData?.companies||data?.companies||[]}}
 
-  function clearSamples() {
-    try {
-      if (typeof clearAdminRuntimeData === 'function') clearAdminRuntimeData();
-      if (typeof applyAdminDashboardData === 'function') applyAdminDashboardData({summary:{working:0,completed:0,notClocked:0,pendingApplications:0},todayRows:[],timeline:[]});
-      if (typeof applyAdminAttendanceData === 'function') applyAdminAttendanceData({rows:[]});
-      if (typeof applyAdminApplicationsData === 'function') applyAdminApplicationsData({rows:[]});
-      if (typeof applyAdminEmployeesData === 'function') applyAdminEmployeesData({rows:[]});
-      if (typeof applyAdminWorkPatternsData === 'function') applyAdminWorkPatternsData({rows:[]});
-      if (typeof render === 'function') render();
-    } catch (error) {
-      console.error('[NEXUS admin clear samples]', error);
-    }
-  }
+  async function loadD1(options={}){if(loading)return;loading=true;const silent=!!options.silent;try{hideLegacyAuth();clearSamples();if(!silent)document.body.classList.add('admin-loading');const data=await fetchData();setAdminProfile(data.admin||{});setCompanySwitch(data.companies||[]);if(typeof applyAdminDashboardData==='function')applyAdminDashboardData(data.dashboard||{summary:{},todayRows:[],timeline:[]});if(typeof applyAdminAttendanceData==='function')applyAdminAttendanceData(data.attendance||{rows:[]});if(typeof applyAdminApplicationsData==='function')applyAdminApplicationsData(data.applications||{rows:[]});if(typeof applyAdminEmployeesData==='function')applyAdminEmployeesData(data.employees||{rows:[]});if(typeof applyAdminWorkPatternsData==='function')applyAdminWorkPatternsData(data.workPatterns||{rows:[]});if(typeof setUpdatedAtNow==='function')setUpdatedAtNow();if(typeof render==='function')render();setCompanySwitch(data.companies||[]);if(typeof renderEmployeeRows==='function')renderEmployeeRows();document.body.classList.remove('admin-loading','auth-locked');hideLegacyAuth();reveal();window.__NEXUS_ADMIN_D1_READY=true}catch(error){console.error('[NEXUS admin D1]',error);if(!silent)showFatal(error)}finally{loading=false}}
 
-  function setAdminProfile(admin = {}) {
-    const name = document.querySelector('.admin-name');
-    const status = document.querySelector('.admin-status');
-    if (name) name.textContent = admin.name || admin.email || '管理者';
-    if (status) status.textContent = admin.role || '管理者';
-  }
+  function install(){if(installed)return;if(typeof render!=='function'||typeof applyAdminEmployeesData!=='function'){setTimeout(install,30);return}installed=true;hideLegacyAuth();try{localStorage.removeItem('nexusOneAdminSession')}catch(_){}try{const now=new Date();attCurrentYear=now.getFullYear();attCurrentMonth=now.getMonth();appCurrentYear=now.getFullYear();appCurrentMonth=now.getMonth();activeCompanyId=normalizeCompanyId(activeCompanyId);if(!['all','HRC','GANBARU'].includes(activeCompanyId))activeCompanyId='all'}catch(_){}setCompanySwitch([{companyId:'HRC',companyName:'HR COMPANY株式会社'},{companyId:'GANBARU',companyName:'株式会社がんばる'}]);clearSamples();window.loadAdminInitialData=loadD1;window.refreshAdminData=()=>loadD1({silent:true});window.makeDailyRows=d1DailyRows;try{makeDailyRows=d1DailyRows}catch(_){}window.nextAttMonth=async delta=>{attCurrentMonth+=delta;if(attCurrentMonth<0){attCurrentMonth=11;attCurrentYear--}if(attCurrentMonth>11){attCurrentMonth=0;attCurrentYear++}await loadD1({silent:true})};try{nextAttMonth=window.nextAttMonth}catch(_){}const refresh=document.querySelector('.refresh,[data-action="refresh"],#refreshBtn');if(refresh&&refresh.dataset.nexusD1Refresh!=='1'){refresh.dataset.nexusD1Refresh='1';refresh.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();loadD1({silent:true})},true)}loadD1()}
 
-  function normalizeCompanyId(value) {
-    return value === 'ITC' ? 'GANBARU' : value;
-  }
-
-  function officialCompanyName(companyId, fallback = '') {
-    if (companyId === 'HRC') return 'HR COMPANY株式会社';
-    if (companyId === 'GANBARU') return '株式会社がんばる';
-    return fallback || companyId || '';
-  }
-
-  function normalizeEmployee(employee = {}) {
-    const companyId = normalizeCompanyId(employee.companyId);
-    return {
-      ...employee,
-      companyId,
-      company: officialCompanyName(companyId, employee.company)
-    };
-  }
-
-  function setCompanySwitch(companies = []) {
-    const select = document.getElementById('globalCompanySwitch');
-    if (!select) return;
-
-    const normalized = [];
-    const seen = new Set();
-    for (const row of companies || []) {
-      const companyId = normalizeCompanyId(row.companyId || row.company_id);
-      if (!companyId || seen.has(companyId)) continue;
-      seen.add(companyId);
-      normalized.push({
-        companyId,
-        companyName: officialCompanyName(companyId, row.companyName || row.company_name)
-      });
-    }
-
-    if (!normalized.some(row => row.companyId === 'HRC')) {
-      normalized.push({ companyId:'HRC', companyName:'HR COMPANY株式会社' });
-    }
-    if (!normalized.some(row => row.companyId === 'GANBARU')) {
-      normalized.push({ companyId:'GANBARU', companyName:'株式会社がんばる' });
-    }
-
-    select.innerHTML = [
-      '<option value="all">2社まとめて表示</option>',
-      ...normalized
-        .filter(row => row.companyId === 'HRC' || row.companyId === 'GANBARU')
-        .sort((a,b) => (a.companyId === 'HRC' ? -1 : b.companyId === 'HRC' ? 1 : 0))
-        .map(row => `<option value="${row.companyId}">${row.companyName}</option>`)
-    ].join('');
-
-    if (typeof activeCompanyId !== 'undefined') {
-      activeCompanyId = normalizeCompanyId(activeCompanyId);
-      if (!['all','HRC','GANBARU'].includes(activeCompanyId)) activeCompanyId = 'all';
-      select.value = activeCompanyId;
-    }
-  }
-
-  function workText(minutes) {
-    const n = Number(minutes || 0);
-    if (!n) return '-';
-    const h = Math.floor(n / 60);
-    const m = n % 60;
-    return m ? `${h}h ${m}m` : `${h}h`;
-  }
-
-  function d1DailyRows(employee) {
-    const lastDay = new Date(attCurrentYear, attCurrentMonth + 1, 0).getDate();
-    const weekNames = ['日','月','火','水','木','金','土'];
-    const pad = n => String(n).padStart(2,'0');
-    const records = new Map((Array.isArray(employee?.dailyRecords) ? employee.dailyRecords : []).map(row => [row.date,row]));
-    const holidays = new Set(Array.isArray(employee?.holidays) ? employee.holidays : []);
-    const rows = [];
-
-    for (let day = 1; day <= lastDay; day++) {
-      const date = new Date(attCurrentYear, attCurrentMonth, day);
-      const iso = `${attCurrentYear}-${pad(attCurrentMonth+1)}-${pad(day)}`;
-      const week = weekNames[date.getDay()];
-      const record = records.get(iso);
-      if (holidays.has(iso)) {
-        rows.push({d:`${pad(attCurrentMonth+1)}/${pad(day)}(${week})`,dayOnly:pad(day),iso,week,in:'休',out:'休',work:'-',main:'休日',tag:'blue',comment:'休日設定',workStyle:'-',clockInGps:false,clockOutGps:false,clockInArea:'-',clockOutArea:'-'});
-        continue;
-      }
-      if (!record) {
-        rows.push({d:`${pad(attCurrentMonth+1)}/${pad(day)}(${week})`,dayOnly:pad(day),iso,week,in:'-',out:'-',work:'-',main:'記録なし',tag:'',comment:'',workStyle:'-',clockInGps:false,clockOutGps:false,clockInArea:'-',clockOutArea:'-'});
-        continue;
-      }
-      const gpsMissing = (record.clockIn && !record.clockInGps) || (record.clockOut && !record.clockOutGps);
-      rows.push({
-        d:`${pad(attCurrentMonth+1)}/${pad(day)}(${week})`,dayOnly:pad(day),iso,week,
-        in:record.clockIn||'-',out:record.clockOut||'-',work:workText(record.workMinutes),
-        main:record.note?'要確認':(gpsMissing?'位置情報未取得':'勤務'),tag:(record.note||gpsMissing)?'orange':'green',comment:record.note||'',
-        workStyle:record.workStyle||'-',clockInGps:record.clockInGps===true,clockOutGps:record.clockOutGps===true,
-        clockInArea:record.clockInArea||(record.clockIn?'取得できませんでした':'-'),clockOutArea:record.clockOutArea||(record.clockOut?'取得できませんでした':'-')
-      });
-    }
-    return rows;
-  }
-
-  async function fetchJson(url) {
-    const accessToken = token();
-    if (!accessToken) throw new Error('ログイン情報がありません。');
-    const response = await fetch(url, { headers:{Authorization:`Bearer ${accessToken}`}, cache:'no-store' });
-    const payload = await response.json().catch(() => ({}));
-    if (response.status === 401 || response.status === 403) {
-      location.replace('/index.html#login');
-      throw new Error(payload.error || '管理者権限を確認できませんでした。');
-    }
-    if (!response.ok || !payload.ok) throw new Error(payload.error || '管理画面データを取得できませんでした。');
-    return payload.data;
-  }
-
-  async function fetchData() {
-    const year = Number(typeof attCurrentYear !== 'undefined' ? attCurrentYear : new Date().getFullYear());
-    const monthIndex = Number(typeof attCurrentMonth !== 'undefined' ? attCurrentMonth : new Date().getMonth());
-    const query = new URLSearchParams({year:String(year),month:String(monthIndex+1)});
-    const [data, employeeData] = await Promise.all([
-      fetchJson(`${DATA_URL}?${query}`),
-      fetchJson(EMPLOYEES_URL)
-    ]);
-
-    return {
-      ...data,
-      employees: { rows:(employeeData?.rows || []).map(normalizeEmployee) },
-      companies: employeeData?.companies || data?.companies || []
-    };
-  }
-
-  async function loadD1(options = {}) {
-    if (loading) return;
-    loading = true;
-    const silent = !!options.silent;
-    try {
-      hideLegacyAuth();
-      if (!silent) document.body.classList.add('admin-loading');
-      const data = await fetchData();
-      setAdminProfile(data.admin || {});
-      setCompanySwitch(data.companies || []);
-      if (typeof applyAdminDashboardData === 'function') applyAdminDashboardData(data.dashboard || {summary:{},todayRows:[],timeline:[]});
-      if (typeof applyAdminAttendanceData === 'function') applyAdminAttendanceData(data.attendance || {rows:[]});
-      if (typeof applyAdminApplicationsData === 'function') applyAdminApplicationsData(data.applications || {rows:[]});
-      if (typeof applyAdminEmployeesData === 'function') applyAdminEmployeesData(data.employees || {rows:[]});
-      if (typeof applyAdminWorkPatternsData === 'function') applyAdminWorkPatternsData(data.workPatterns || {rows:[]});
-      if (typeof setUpdatedAtNow === 'function') setUpdatedAtNow();
-      if (typeof render === 'function') render();
-      setCompanySwitch(data.companies || []);
-      if (typeof renderEmployeeRows === 'function') renderEmployeeRows();
-      document.body.classList.remove('admin-loading','auth-locked');
-      hideLegacyAuth();
-    } catch (error) {
-      console.error('[NEXUS admin D1]', error);
-      document.body.classList.remove('admin-loading');
-      const errorBox = document.getElementById('adminLoginError');
-      if (errorBox) { errorBox.textContent=error.message||'管理画面データを取得できませんでした。'; errorBox.classList.add('show'); }
-    } finally {
-      loading = false;
-    }
-  }
-
-  function install() {
-    if (installed) return;
-    if (typeof render !== 'function' || typeof applyAdminEmployeesData !== 'function') { setTimeout(install,30); return; }
-    installed = true;
-    hideLegacyAuth();
-    try { localStorage.removeItem('nexusOneAdminSession'); } catch (_) {}
-    try {
-      const now = new Date();
-      attCurrentYear = now.getFullYear();
-      attCurrentMonth = now.getMonth();
-      appCurrentYear = now.getFullYear();
-      appCurrentMonth = now.getMonth();
-      activeCompanyId = normalizeCompanyId(activeCompanyId);
-      if (!['all','HRC','GANBARU'].includes(activeCompanyId)) activeCompanyId = 'all';
-    } catch (_) {}
-    setCompanySwitch([
-      {companyId:'HRC',companyName:'HR COMPANY株式会社'},
-      {companyId:'GANBARU',companyName:'株式会社がんばる'}
-    ]);
-    clearSamples();
-    window.loadAdminInitialData = loadD1;
-    window.refreshAdminData = () => loadD1({silent:true});
-    window.makeDailyRows = d1DailyRows;
-    try { makeDailyRows = d1DailyRows; } catch (_) {}
-    window.nextAttMonth = async delta => {
-      attCurrentMonth += delta;
-      if (attCurrentMonth < 0) { attCurrentMonth=11; attCurrentYear--; }
-      if (attCurrentMonth > 11) { attCurrentMonth=0; attCurrentYear++; }
-      await loadD1({silent:true});
-    };
-    try { nextAttMonth = window.nextAttMonth; } catch (_) {}
-    const refresh = document.querySelector('.refresh,[data-action="refresh"],#refreshBtn');
-    if (refresh && refresh.dataset.nexusD1Refresh !== '1') {
-      refresh.dataset.nexusD1Refresh='1';
-      refresh.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();loadD1({silent:true});},true);
-    }
-    loadD1();
-  }
-
-  window.NEXUS_ADMIN_D1 = {reload:()=>loadD1({silent:true})};
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',install,{once:true});
-  else install();
+  window.NEXUS_ADMIN_D1={reload:()=>loadD1({silent:true})};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })();
