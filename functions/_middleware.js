@@ -144,6 +144,7 @@ export async function onRequest(context) {
     if (!html.includes('/nexus-admin-runtime.js')) scripts.push('<script src="/nexus-admin-runtime.js"></script>');
     if (!html.includes('/nexus-admin-modal-guard.js')) scripts.push('<script src="/nexus-admin-modal-guard.js"></script>');
     if (!html.includes('/nexus-admin-actions.js')) scripts.push('<script src="/nexus-admin-actions.js"></script>');
+    if (!html.includes('/nexus-admin-dashboard-status.js')) scripts.push('<script src="/nexus-admin-dashboard-status.js"></script>');
     if (!html.includes('/nexus-admin-ui-tweaks.js')) scripts.push('<script src="/nexus-admin-ui-tweaks.js"></script>');
   }
 
