@@ -13,10 +13,10 @@
       #nexusClientCard{
         --nexus-client-text:#0f172a;
         --nexus-client-muted:#64748b;
-        --nexus-client-border:rgba(15,23,42,.22);
+        --nexus-client-border:rgba(15,23,42,.20);
         --nexus-client-placeholder:rgba(71,85,105,.62);
-        --nexus-client-surface:rgba(255,255,255,.30);
-        --nexus-client-surface-strong:rgba(255,255,255,.42);
+        --nexus-client-surface:rgba(255,255,255,.18);
+        --nexus-client-surface-strong:rgba(255,255,255,.26);
         color:var(--nexus-client-text)!important;
       }
       html.nexus-theme-dark #nexusClientCard{
@@ -32,6 +32,7 @@
       #nexusClientCard .nexus-client-value,
       #nexusClientCard input,
       #nexusClientCard textarea{color:var(--nexus-client-text)!important}
+      #nexusClientCard .card-title{color:#0f172a!important}
       html.nexus-theme-dark #nexusClientCard .card-title,
       html.nexus-theme-dark #nexusClientCard .nexus-client-label,
       html.nexus-theme-dark #nexusClientCard .nexus-client-value{color:#fff!important}
@@ -44,32 +45,32 @@
         border:1px solid var(--nexus-client-border);
         border-radius:16px;
         background:var(--nexus-client-surface);
-        box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 6px 20px rgba(15,23,42,.035);
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 20px rgba(15,23,42,.025);
         backdrop-filter:blur(12px);
         -webkit-backdrop-filter:blur(12px)
       }
       html.nexus-theme-dark #nexusClientCard .nexus-client-summary{box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
       #nexusClientCard .nexus-client-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;padding:8px 0;border-bottom:1px solid var(--nexus-client-border)}
       #nexusClientCard .nexus-client-row:last-child{border-bottom:0}
-      #nexusClientCard .nexus-client-label{font-size:11px;font-weight:800;opacity:.78}
+      #nexusClientCard .nexus-client-label{font-size:11px;font-weight:800;opacity:.78;color:#334155!important}
       #nexusClientCard .nexus-client-value{font-size:13px;font-weight:800;line-height:1.6;word-break:break-word}
       #nexusClientCard .nexus-client-form{margin-top:14px}
       #nexusClientCard .nexus-client-field{margin-top:11px}
       #nexusClientCard .nexus-client-field:first-child{margin-top:0}
-      #nexusClientCard .nexus-client-field label{display:block;margin-bottom:6px;font-size:11px;font-weight:800;color:var(--nexus-client-text)!important}
+      #nexusClientCard .nexus-client-field label{display:block;margin-bottom:6px;font-size:11px;font-weight:800;color:#334155!important}
       html.nexus-theme-dark #nexusClientCard .nexus-client-field label{color:#fff!important}
       #nexusClientCard input,#nexusClientCard textarea{
         width:100%;
         box-sizing:border-box;
-        border:1px solid var(--nexus-client-border);
+        border:1px solid rgba(15,23,42,.22);
         border-radius:14px;
         padding:12px 14px;
         font:inherit;
         background:var(--nexus-client-surface-strong)!important;
         outline:none;
-        color:var(--nexus-client-text)!important;
-        caret-color:var(--nexus-client-text);
-        box-shadow:inset 0 1px 0 rgba(255,255,255,.60),0 1px 2px rgba(15,23,42,.03);
+        color:#0f172a!important;
+        caret-color:#0f172a;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.50),0 1px 2px rgba(15,23,42,.025);
         backdrop-filter:blur(10px);
         -webkit-backdrop-filter:blur(10px)
       }
@@ -77,20 +78,17 @@
         background:var(--nexus-client-surface)!important;
         border-color:rgba(226,232,240,.32);
         color:#fff!important;
+        caret-color:#fff;
         box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 0 0 1px rgba(255,255,255,.015)
       }
-      #nexusClientCard input:focus,#nexusClientCard textarea:focus{border-color:rgba(59,130,246,.58);box-shadow:0 0 0 3px rgba(59,130,246,.09),inset 0 1px 0 rgba(255,255,255,.65)}
+      #nexusClientCard input:focus,#nexusClientCard textarea:focus{border-color:rgba(59,130,246,.58);box-shadow:0 0 0 3px rgba(59,130,246,.09),inset 0 1px 0 rgba(255,255,255,.55)}
       #nexusClientCard textarea{min-height:84px;resize:vertical;line-height:1.55}
       #nexusClientCard input::placeholder,#nexusClientCard textarea::placeholder{color:var(--nexus-client-placeholder)!important;opacity:1}
       #nexusClientCard .nexus-client-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
       #nexusClientCard .nexus-client-edit{width:100%;margin-top:12px}
-      #nexusClientCard .nexus-client-cancel{border:1px solid var(--nexus-client-border);background:rgba(255,255,255,.12);color:var(--nexus-client-text);border-radius:14px;font-weight:800;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+      #nexusClientCard .nexus-client-cancel{border:1px solid var(--nexus-client-border);background:rgba(255,255,255,.10);color:var(--nexus-client-text);border-radius:14px;font-weight:800;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
       html.nexus-theme-dark #nexusClientCard .nexus-client-cancel{background:transparent;color:#fff}
       #nexusClientCard .nexus-client-status{min-height:18px;margin-top:8px;text-align:center;font-size:12px}
-      @media (prefers-color-scheme: dark){
-        #nexusClientCard .card-title{color:#fff!important}
-        #nexusClientCard input,#nexusClientCard textarea{color:#fff!important;caret-color:#fff}
-      }
     `;
     doc.head.appendChild(style);
   }
@@ -107,10 +105,11 @@
     const body=doc.body;
     const card=doc.getElementById('nexusClientCard');
     const explicit=[root?.dataset?.theme,body?.dataset?.theme,root?.getAttribute('data-mode'),body?.getAttribute('data-mode'),root?.className,body?.className].filter(Boolean).join(' ').toLowerCase();
-    let dark=/dark|night/.test(explicit);
+    const explicitLight=/light|day/.test(explicit);
+    let dark=!explicitLight && /dark|night/.test(explicit);
 
-    if(!dark){
-      const sampleElements=[card,card?.parentElement,body,root].filter(Boolean);
+    if(!dark && !explicitLight){
+      const sampleElements=[card?.parentElement,body,root].filter(Boolean);
       for(const el of sampleElements){
         const style=getComputedStyle(el);
         const bg=parseRgb(style.backgroundColor);
@@ -118,11 +117,10 @@
         if(bgLum!==null && bgLum<0.45){dark=true;break}
         const fg=parseRgb(style.color);
         const fgLum=luminance(fg);
-        if(fgLum!==null && fgLum>.68 && (bgLum===null || bgLum<0.6)){dark=true;break}
+        if(fgLum!==null && fgLum>.72 && (bgLum===null || bgLum<0.58)){dark=true;break}
       }
     }
 
-    if(!dark && window.matchMedia?.('(prefers-color-scheme: dark)').matches) dark=true;
     root.classList.toggle('nexus-theme-dark',dark);
   }
 
