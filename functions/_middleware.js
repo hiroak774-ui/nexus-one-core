@@ -71,6 +71,13 @@ function injectBeforeBodyEnd(html, scripts) {
   return bodyIndex >= 0 ? html.slice(0, bodyIndex) + scripts.join('') + html.slice(bodyIndex) : html + scripts.join('');
 }
 
+function injectFavicon(html) {
+  if (html.includes('href="/favicon.svg"') || html.includes("href='/favicon.svg'")) return html;
+  const tag = '<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="shortcut icon" href="/favicon.svg">';
+  const headIndex = html.toLowerCase().indexOf('</head>');
+  return headIndex >= 0 ? html.slice(0, headIndex) + tag + html.slice(headIndex) : tag + html;
+}
+
 function looksLikeAdminHtml(html) {
   return html.includes('id="globalCompanySwitch"') ||
     html.includes('ADMIN CONSOLE') ||
@@ -95,6 +102,8 @@ export async function onRequest(context) {
   const isStaffShell = !isAdminShell && ((url.pathname === '/' || url.pathname === '/index.html') || looksLikeStaffHtml(html));
 
   if (!isStaffShell && !isAdminShell) return response;
+
+  html = injectFavicon(html);
 
   const scripts = [];
   if (!html.includes('/nexus-auth-persistence.js')) {
