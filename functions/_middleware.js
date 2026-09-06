@@ -80,7 +80,7 @@ function injectAppLinks(html) {
     tags.push('<link rel="manifest" href="/manifest.webmanifest">');
   }
   if (!html.includes('rel="apple-touch-icon"') && !html.includes("rel='apple-touch-icon'")) {
-    tags.push('<link rel="apple-touch-icon" href="/favicon.svg">');
+    tags.push('<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">');
   }
   if (!tags.length) return html;
   const headIndex = html.toLowerCase().indexOf('</head>');
