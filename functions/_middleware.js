@@ -97,6 +97,9 @@ export async function onRequest(context) {
   if (!isStaffShell && !isAdminShell) return response;
 
   const scripts = [];
+  if (!html.includes('/nexus-auth-persistence.js')) {
+    scripts.push('<script src="/nexus-auth-persistence.js"></script>');
+  }
 
   if (isStaffShell) {
     html = sanitizeLegacyStaffShell(html);
