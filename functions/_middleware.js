@@ -102,8 +102,8 @@ export async function onRequest(context) {
     html = sanitizeLegacyStaffShell(html);
     if (!html.includes('/nexus-auth-client.js')) scripts.push('<script src="/nexus-auth-client.js"></script>');
     if (!html.includes('/nexus-staff-profile.js')) scripts.push('<script src="/nexus-staff-profile.js"></script>');
-    if (!html.includes('/nexus-staff-runtime.js')) scripts.push('<script src="/nexus-staff-runtime.js"></script>');
     if (!html.includes('/nexus-staff-client-workplace.js')) scripts.push('<script src="/nexus-staff-client-workplace.js"></script>');
+    if (!html.includes('/nexus-staff-runtime.js')) scripts.push('<script src="/nexus-staff-runtime.js"></script>');
     if (!html.includes('/nexus-admin-router.js')) scripts.push('<script src="/nexus-admin-router.js"></script>');
     if (!html.includes('nexusSetupScrollBound')) scripts.push(SETUP_SCROLL_FIX);
   }
