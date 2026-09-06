@@ -1,6 +1,18 @@
 import { verifyGoogleAccessToken, jsonResponse, getBearerToken } from '../../_lib/googleAuth.js';
 
+async function ensureClientColumns(db) {
+  const columns = await db.prepare(`PRAGMA table_info(employees)`).all();
+  const names = new Set((columns.results || []).map(row => row.name));
+  if (!names.has('current_client_work_description')) {
+    await db.prepare(`ALTER TABLE employees ADD COLUMN current_client_work_description TEXT`).run();
+  }
+  if (!names.has('current_client_nearest_station')) {
+    await db.prepare(`ALTER TABLE employees ADD COLUMN current_client_nearest_station TEXT`).run();
+  }
+}
+
 async function loadApprovedEmployee(db, googleSub) {
+  await ensureClientColumns(db);
   return db.prepare(`
     SELECT
       u.email,
@@ -13,6 +25,8 @@ async function loadApprovedEmployee(db, googleSub) {
       e.work_type,
       e.base_work_pattern_id,
       e.current_client_name,
+      e.current_client_work_description,
+      e.current_client_nearest_station,
       e.postal_code,
       e.prefecture,
       e.city_address,
@@ -48,6 +62,8 @@ function toProfile(employee) {
     registrationStatus: employee.registration_status,
     workType: employee.work_type,
     currentClientName: employee.current_client_name || '',
+    currentClientWorkDescription: employee.current_client_work_description || '',
+    currentClientNearestStation: employee.current_client_nearest_station || '',
     baseWorkPatternId: employee.base_work_pattern_id,
     workPatternName: employee.work_pattern_name,
     workPatternStartTime: employee.work_pattern_start_time,
@@ -82,6 +98,7 @@ async function authenticate(request, env) {
 }
 
 async function loadByEmployeeId(db, employeeId) {
+  await ensureClientColumns(db);
   return db.prepare(`
     SELECT
       u.email,
@@ -94,6 +111,8 @@ async function loadByEmployeeId(db, employeeId) {
       e.work_type,
       e.base_work_pattern_id,
       e.current_client_name,
+      e.current_client_work_description,
+      e.current_client_nearest_station,
       e.postal_code,
       e.prefecture,
       e.city_address,
@@ -135,7 +154,7 @@ export async function onRequestPatch({ request, env }) {
     }
 
     const hasAddress = ['postalCode','prefecture','cityAddress','streetAddress','building'].some(key => Object.prototype.hasOwnProperty.call(body, key));
-    const hasClient = Object.prototype.hasOwnProperty.call(body, 'currentClientName');
+    const hasClient = ['currentClientName','currentClientWorkDescription','currentClientNearestStation'].some(key => Object.prototype.hasOwnProperty.call(body, key));
     if (!hasAddress && !hasClient) return jsonResponse({ ok: false, error: '更新項目がありません。' }, 400);
 
     if (hasAddress) {
@@ -155,12 +174,21 @@ export async function onRequestPatch({ request, env }) {
     }
 
     if (hasClient) {
+      await ensureClientColumns(env.DB);
       const currentClientName = String(body.currentClientName || '').trim().slice(0, 120);
+      const currentClientWorkDescription = String(body.currentClientWorkDescription || '').trim().slice(0, 300);
+      const currentClientNearestStation = String(body.currentClientNearestStation || '').trim().slice(0, 120);
+      if (!currentClientName || !currentClientWorkDescription || !currentClientNearestStation) {
+        return jsonResponse({ ok: false, error: '会社名・業務内容・最寄駅を入力してください。' }, 400);
+      }
       await env.DB.prepare(`
         UPDATE employees
-        SET current_client_name=?, updated_at=CURRENT_TIMESTAMP
+        SET current_client_name=?,
+            current_client_work_description=?,
+            current_client_nearest_station=?,
+            updated_at=CURRENT_TIMESTAMP
         WHERE employee_id=?
-      `).bind(currentClientName, employee.employee_id).run();
+      `).bind(currentClientName, currentClientWorkDescription, currentClientNearestStation, employee.employee_id).run();
     }
 
     const updated = await loadByEmployeeId(env.DB, employee.employee_id);
