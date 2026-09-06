@@ -13,35 +13,37 @@
       #nexusClientCard{
         --nexus-client-text:#111827;
         --nexus-client-muted:#64748b;
-        --nexus-client-border:rgba(15,23,42,.14);
+        --nexus-client-border:rgba(15,23,42,.24);
         --nexus-client-placeholder:rgba(71,85,105,.72);
         color:var(--nexus-client-text)!important;
       }
       html.nexus-theme-dark #nexusClientCard{
         --nexus-client-text:#f8fafc;
         --nexus-client-muted:#cbd5e1;
-        --nexus-client-border:rgba(226,232,240,.18);
-        --nexus-client-placeholder:rgba(203,213,225,.68);
+        --nexus-client-border:rgba(226,232,240,.34);
+        --nexus-client-placeholder:rgba(203,213,225,.72);
       }
       #nexusClientCard .card-title,
       #nexusClientCard .nexus-client-label,
       #nexusClientCard .nexus-client-value,
       #nexusClientCard input,
       #nexusClientCard textarea{color:var(--nexus-client-text)!important}
+      html.nexus-theme-dark #nexusClientCard .card-title{color:#fff!important}
       #nexusClientCard .card-kicker,
       #nexusClientCard .nexus-client-muted,
       #nexusClientCard .nexus-client-status{color:var(--nexus-client-muted)!important}
-      #nexusClientCard .nexus-client-summary{margin-top:14px;padding:14px;border:1px solid var(--nexus-client-border);border-radius:16px;background:transparent}
+      #nexusClientCard .nexus-client-summary{margin-top:14px;padding:14px;border:1px solid var(--nexus-client-border);border-radius:16px;background:rgba(255,255,255,.015);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
       #nexusClientCard .nexus-client-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;padding:8px 0;border-bottom:1px solid var(--nexus-client-border)}
       #nexusClientCard .nexus-client-row:last-child{border-bottom:0}
-      #nexusClientCard .nexus-client-label{font-size:11px;font-weight:800;opacity:.68}
+      #nexusClientCard .nexus-client-label{font-size:11px;font-weight:800;opacity:.74}
       #nexusClientCard .nexus-client-value{font-size:13px;font-weight:800;line-height:1.6;word-break:break-word}
       #nexusClientCard .nexus-client-form{margin-top:14px}
       #nexusClientCard .nexus-client-field{margin-top:11px}
       #nexusClientCard .nexus-client-field:first-child{margin-top:0}
       #nexusClientCard .nexus-client-field label{display:block;margin-bottom:6px;font-size:11px;font-weight:800;color:var(--nexus-client-text)!important}
-      #nexusClientCard input,#nexusClientCard textarea{width:100%;box-sizing:border-box;border:1px solid var(--nexus-client-border);border-radius:14px;padding:12px 14px;font:inherit;background:transparent!important;outline:none;color:var(--nexus-client-text)!important;caret-color:var(--nexus-client-text)}
-      #nexusClientCard input:focus,#nexusClientCard textarea:focus{border-color:rgba(59,130,246,.55);box-shadow:0 0 0 3px rgba(59,130,246,.10)}
+      #nexusClientCard input,#nexusClientCard textarea{width:100%;box-sizing:border-box;border:1px solid var(--nexus-client-border);border-radius:14px;padding:12px 14px;font:inherit;background:rgba(255,255,255,.015)!important;outline:none;color:var(--nexus-client-text)!important;caret-color:var(--nexus-client-text);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+      html.nexus-theme-dark #nexusClientCard input,html.nexus-theme-dark #nexusClientCard textarea{background:rgba(255,255,255,.035)!important}
+      #nexusClientCard input:focus,#nexusClientCard textarea:focus{border-color:rgba(96,165,250,.72);box-shadow:0 0 0 3px rgba(59,130,246,.10)}
       #nexusClientCard textarea{min-height:84px;resize:vertical;line-height:1.55}
       #nexusClientCard input::placeholder,#nexusClientCard textarea::placeholder{color:var(--nexus-client-placeholder)!important;opacity:1}
       #nexusClientCard .nexus-client-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
@@ -58,16 +60,30 @@
   }
 
   function syncTheme(doc){
-    const candidates=[doc.body,doc.documentElement].filter(Boolean);
-    let rgb=null;
-    for(const el of candidates){
-      const value=getComputedStyle(el).backgroundColor;
-      const parsed=parseRgb(value);
-      if(parsed && !(parsed[0]===0&&parsed[1]===0&&parsed[2]===0&&/rgba/.test(value)&&value.endsWith(', 0)'))){rgb=parsed;break}
+    const root=doc.documentElement;
+    const body=doc.body;
+    const explicit=[root?.dataset?.theme,body?.dataset?.theme,root?.getAttribute('data-mode'),body?.getAttribute('data-mode'),root?.className,body?.className].filter(Boolean).join(' ').toLowerCase();
+    let dark=/dark|night/.test(explicit);
+    if(!dark){
+      const bodyColor=body ? getComputedStyle(body).color : '';
+      const textRgb=parseRgb(bodyColor);
+      if(textRgb){
+        const textLum=(0.2126*textRgb[0]+0.7152*textRgb[1]+0.0722*textRgb[2])/255;
+        if(textLum>.68) dark=true;
+      }
     }
-    if(!rgb) return;
-    const luminance=(0.2126*rgb[0]+0.7152*rgb[1]+0.0722*rgb[2])/255;
-    doc.documentElement.classList.toggle('nexus-theme-dark',luminance<0.45);
+    if(!dark){
+      const candidates=[body,root].filter(Boolean);
+      for(const el of candidates){
+        const value=getComputedStyle(el).backgroundColor;
+        const rgb=parseRgb(value);
+        if(!rgb) continue;
+        const luminance=(0.2126*rgb[0]+0.7152*rgb[1]+0.0722*rgb[2])/255;
+        if(luminance<0.45){dark=true;break}
+      }
+    }
+    if(!dark && window.matchMedia?.('(prefers-color-scheme: dark)').matches) dark=true;
+    root.classList.toggle('nexus-theme-dark',dark);
   }
 
   function hasSaved(profile={}){
@@ -154,8 +170,8 @@
     syncTheme(doc);
 
     const observer=new MutationObserver(()=>syncTheme(doc));
-    observer.observe(doc.documentElement,{attributes:true,attributeFilter:['class','style','data-theme']});
-    observer.observe(doc.body,{attributes:true,attributeFilter:['class','style','data-theme']});
+    observer.observe(doc.documentElement,{attributes:true,attributeFilter:['class','style','data-theme','data-mode']});
+    observer.observe(doc.body,{attributes:true,attributeFilter:['class','style','data-theme','data-mode']});
 
     try{
       const profile=doc.documentElement.__nexusStaffProfile || await fetchProfile(doc);
