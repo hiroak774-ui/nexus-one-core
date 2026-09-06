@@ -25,6 +25,21 @@ async function loadClosures(db, employeeIds, monthKey) {
   } catch (_) { return new Set(); }
 }
 
+async function loadApprovedFullDayAbsences(db, employeeIds, workDate) {
+  if (!employeeIds.length) return new Set();
+  try {
+    const result=await db.prepare(`
+      SELECT DISTINCT employee_id
+      FROM applications
+      WHERE employee_id IN (${placeholders(employeeIds)})
+        AND target_date=?
+        AND status='承認済'
+        AND application_type IN ('有給','欠勤')
+    `).bind(...employeeIds,workDate).all();
+    return new Set((result.results||[]).map(row=>row.employee_id));
+  } catch (_) { return new Set(); }
+}
+
 export async function onRequestGet({ request, env }) {
   try {
     const ctx=await requireAdmin(request,env);
@@ -75,7 +90,11 @@ export async function onRequestGet({ request, env }) {
     `).bind(...employeeIds,today).all():{results:[]};
 
     const pendingRow=await env.DB.prepare(`SELECT COUNT(*) AS count FROM applications WHERE company_id IN (${scope}) AND status='承認待ち'`).bind(...ids).first();
-    const [daySettings,closures]=await Promise.all([loadDaySettings(env.DB,employeeIds,monthKey),loadClosures(env.DB,employeeIds,monthKey)]);
+    const [daySettings,closures,fullDayAbsences]=await Promise.all([
+      loadDaySettings(env.DB,employeeIds,monthKey),
+      loadClosures(env.DB,employeeIds,monthKey),
+      loadApprovedFullDayAbsences(env.DB,employeeIds,today)
+    ]);
 
     const attByEmployee=new Map();
     for(const row of attendanceRaw){if(!attByEmployee.has(row.employee_id))attByEmployee.set(row.employee_id,[]);attByEmployee.get(row.employee_id).push(row);}
@@ -114,11 +133,36 @@ export async function onRequestGet({ request, env }) {
 
     const workPatterns=(patternsResult.results||[]).map(w=>({id:w.work_pattern_id,companyId:w.company_id||'',company:w.company_name||'共通',name:w.display_name,type:'固定勤務',start:hhmm(w.start_time),end:hhmm(w.end_time),break:`${Number(w.break_minutes||0)}分`,users:Number(w.users||0),status:Number(w.is_active)===1?'有効':'無効',cls:Number(w.is_active)===1?'green':'red',late:'開始時刻基準',early:'終了時刻基準',overtime:'所定超過分'}));
 
-    const todayRows=(todayAttendanceResult.results||[]).map(r=>({id:r.employee_id,name:r.official_name,employeeId:r.employee_id,employeeName:r.official_name,companyId:r.company_id,company:r.company_name,companyName:r.company_name,type:r.work_type,in:hhmm(r.clock_in_at),out:hhmm(r.clock_out_at),clockIn:hhmm(r.clock_in_at),clockOut:hhmm(r.clock_out_at),location:r.work_style||'',workStyle:r.work_style||'',status:r.clock_out_at?'退勤済':r.clock_in_at?'勤務中':'未打刻',email:r.email||''}));
+    const todayAttendanceByEmployee=new Map((todayAttendanceResult.results||[]).map(row=>[row.employee_id,row]));
+    const activeEmployees=employeesRaw.filter(e=>e.registration_status==='承認済'&&e.employment_status==='在籍'&&e.account_status==='有効');
+
+    const scheduledToday=activeEmployees.filter(e=>{
+      if(daySettings.get(`${e.employee_id}|${today}`)==='休日') return false;
+      if(fullDayAbsences.has(e.employee_id)) return false;
+      if(e.work_type==='シフト勤務') {
+        const row=todayAttendanceByEmployee.get(e.employee_id);
+        return !!(row && (row.scheduled_start_time||row.scheduled_end_time||row.clock_in_at||row.clock_out_at));
+      }
+      return true;
+    });
+
+    const todayRows=scheduledToday.map(e=>{
+      const r=todayAttendanceByEmployee.get(e.employee_id)||{};
+      return {
+        id:e.employee_id,name:e.official_name,employeeId:e.employee_id,employeeName:e.official_name,
+        companyId:e.company_id,company:e.company_name,companyName:e.company_name,type:e.work_type,
+        in:hhmm(r.clock_in_at),out:hhmm(r.clock_out_at),clockIn:hhmm(r.clock_in_at),clockOut:hhmm(r.clock_out_at),
+        location:r.work_style||'',workStyle:r.work_style||'',
+        status:r.clock_out_at?'退勤済':r.clock_in_at?'勤務中':'未打刻',email:e.email||'',
+        scheduledStart:hhmm(r.scheduled_start_time)||hhmm(e.pattern_start),
+        scheduledEnd:hhmm(r.scheduled_end_time)||hhmm(e.pattern_end)
+      };
+    });
+
     const working=todayRows.filter(r=>r.status==='勤務中').length;
     const completed=todayRows.filter(r=>r.status==='退勤済').length;
-    const activeEmployees=employeesRaw.filter(e=>e.registration_status==='承認済'&&e.employment_status==='在籍').length;
+    const notClocked=todayRows.filter(r=>r.status==='未打刻').length;
 
-    return jsonResponse({ok:true,data:{year,month,admin:{userId:ctx.user.user_id,name:ctx.user.display_name||ctx.user.email,email:ctx.user.email,role:ctx.isSuperAdmin?'SUPER_ADMIN':ctx.access[0].admin_role},companies:ctx.companies,dashboard:{summary:{working,completed,notClocked:Math.max(0,activeEmployees-working-completed),pendingApplications:Number(pendingRow?.count||0)},todayRows,timeline:[]},attendance:{rows:attendance},applications:{rows:applications},employees:{rows:employees},workPatterns:{rows:workPatterns}}});
+    return jsonResponse({ok:true,data:{year,month,admin:{userId:ctx.user.user_id,name:ctx.user.display_name||ctx.user.email,email:ctx.user.email,role:ctx.isSuperAdmin?'SUPER_ADMIN':ctx.access[0].admin_role},companies:ctx.companies,dashboard:{summary:{working,completed,notClocked,pendingApplications:Number(pendingRow?.count||0)},todayRows,timeline:[]},attendance:{rows:attendance},applications:{rows:applications},employees:{rows:employees},workPatterns:{rows:workPatterns}}});
   } catch(error) { return adminError(error,'Failed to load admin data'); }
 }
