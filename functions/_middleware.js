@@ -103,6 +103,7 @@ export async function onRequest(context) {
     if (!html.includes('/nexus-auth-client.js')) scripts.push('<script src="/nexus-auth-client.js"></script>');
     if (!html.includes('/nexus-staff-profile.js')) scripts.push('<script src="/nexus-staff-profile.js"></script>');
     if (!html.includes('/nexus-staff-runtime.js')) scripts.push('<script src="/nexus-staff-runtime.js"></script>');
+    if (!html.includes('/nexus-staff-client-workplace.js')) scripts.push('<script src="/nexus-staff-client-workplace.js"></script>');
     if (!html.includes('/nexus-admin-router.js')) scripts.push('<script src="/nexus-admin-router.js"></script>');
     if (!html.includes('nexusSetupScrollBound')) scripts.push(SETUP_SCROLL_FIX);
   }
@@ -117,6 +118,7 @@ export async function onRequest(context) {
     if (!html.includes('/nexus-admin-auth.js')) scripts.push('<script src="/nexus-admin-auth.js"></script>');
     if (!html.includes('/nexus-admin-runtime.js')) scripts.push('<script src="/nexus-admin-runtime.js"></script>');
     if (!html.includes('/nexus-admin-actions.js')) scripts.push('<script src="/nexus-admin-actions.js"></script>');
+    if (!html.includes('/nexus-admin-ui-tweaks.js')) scripts.push('<script src="/nexus-admin-ui-tweaks.js"></script>');
   }
 
   html = injectBeforeBodyEnd(html, scripts);
