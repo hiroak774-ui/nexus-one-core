@@ -47,7 +47,7 @@ function toProfile(employee) {
     employmentStatus: employee.employment_status,
     registrationStatus: employee.registration_status,
     workType: employee.work_type,
-    currentClientName: employee.current_client_name,
+    currentClientName: employee.current_client_name || '',
     baseWorkPatternId: employee.base_work_pattern_id,
     workPatternName: employee.work_pattern_name,
     workPatternStartTime: employee.work_pattern_start_time,
@@ -81,6 +81,38 @@ async function authenticate(request, env) {
   return { google, employee };
 }
 
+async function loadByEmployeeId(db, employeeId) {
+  return db.prepare(`
+    SELECT
+      u.email,
+      e.employee_id,
+      e.company_id,
+      e.employee_number,
+      e.official_name,
+      e.employment_status,
+      e.registration_status,
+      e.work_type,
+      e.base_work_pattern_id,
+      e.current_client_name,
+      e.postal_code,
+      e.prefecture,
+      e.city_address,
+      e.street_address,
+      e.building,
+      c.company_name,
+      wp.display_name AS work_pattern_name,
+      wp.start_time AS work_pattern_start_time,
+      wp.end_time AS work_pattern_end_time,
+      wp.break_minutes AS work_pattern_break_minutes
+    FROM users u
+    JOIN employees e ON e.user_id = u.user_id
+    JOIN companies c ON c.company_id = e.company_id
+    LEFT JOIN work_patterns wp ON wp.work_pattern_id = e.base_work_pattern_id
+    WHERE e.employee_id = ?
+    LIMIT 1
+  `).bind(employeeId).first();
+}
+
 export async function onRequestGet({ request, env }) {
   try {
     const { employee } = await authenticate(request, env);
@@ -102,65 +134,36 @@ export async function onRequestPatch({ request, env }) {
       return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
     }
 
-    const postalCode = String(body.postalCode || '').trim();
-    const prefecture = String(body.prefecture || '').trim();
-    const cityAddress = String(body.cityAddress || '').trim();
-    const streetAddress = String(body.streetAddress || '').trim();
-    const building = String(body.building || '').trim();
+    const hasAddress = ['postalCode','prefecture','cityAddress','streetAddress','building'].some(key => Object.prototype.hasOwnProperty.call(body, key));
+    const hasClient = Object.prototype.hasOwnProperty.call(body, 'currentClientName');
+    if (!hasAddress && !hasClient) return jsonResponse({ ok: false, error: '更新項目がありません。' }, 400);
 
-    if (!prefecture || !cityAddress || !streetAddress) {
-      return jsonResponse({ ok: false, error: '都道府県・市区町村・番地は必須です。' }, 400);
+    if (hasAddress) {
+      const postalCode = String(body.postalCode || '').trim();
+      const prefecture = String(body.prefecture || '').trim();
+      const cityAddress = String(body.cityAddress || '').trim();
+      const streetAddress = String(body.streetAddress || '').trim();
+      const building = String(body.building || '').trim();
+      if (!prefecture || !cityAddress || !streetAddress) {
+        return jsonResponse({ ok: false, error: '都道府県・市区町村・番地は必須です。' }, 400);
+      }
+      await env.DB.prepare(`
+        UPDATE employees
+        SET postal_code=?, prefecture=?, city_address=?, street_address=?, building=?, updated_at=CURRENT_TIMESTAMP
+        WHERE employee_id=?
+      `).bind(postalCode, prefecture, cityAddress, streetAddress, building, employee.employee_id).run();
     }
 
-    await env.DB.prepare(`
-      UPDATE employees
-      SET postal_code = ?,
-          prefecture = ?,
-          city_address = ?,
-          street_address = ?,
-          building = ?,
-          updated_at = ?
-      WHERE employee_id = ?
-    `).bind(
-      postalCode,
-      prefecture,
-      cityAddress,
-      streetAddress,
-      building,
-      new Date().toISOString(),
-      employee.employee_id
-    ).run();
+    if (hasClient) {
+      const currentClientName = String(body.currentClientName || '').trim().slice(0, 120);
+      await env.DB.prepare(`
+        UPDATE employees
+        SET current_client_name=?, updated_at=CURRENT_TIMESTAMP
+        WHERE employee_id=?
+      `).bind(currentClientName, employee.employee_id).run();
+    }
 
-    const updated = await env.DB.prepare(`
-      SELECT
-        u.email,
-        e.employee_id,
-        e.company_id,
-        e.employee_number,
-        e.official_name,
-        e.employment_status,
-        e.registration_status,
-        e.work_type,
-        e.base_work_pattern_id,
-        e.current_client_name,
-        e.postal_code,
-        e.prefecture,
-        e.city_address,
-        e.street_address,
-        e.building,
-        c.company_name,
-        wp.display_name AS work_pattern_name,
-        wp.start_time AS work_pattern_start_time,
-        wp.end_time AS work_pattern_end_time,
-        wp.break_minutes AS work_pattern_break_minutes
-      FROM users u
-      JOIN employees e ON e.user_id = u.user_id
-      JOIN companies c ON c.company_id = e.company_id
-      LEFT JOIN work_patterns wp ON wp.work_pattern_id = e.base_work_pattern_id
-      WHERE e.employee_id = ?
-      LIMIT 1
-    `).bind(employee.employee_id).first();
-
+    const updated = await loadByEmployeeId(env.DB, employee.employee_id);
     return jsonResponse({ ok: true, data: toProfile(updated) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update staff profile';
