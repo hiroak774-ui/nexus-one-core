@@ -14,16 +14,14 @@
         --nexus-client-text:#111827;
         --nexus-client-muted:#64748b;
         --nexus-client-border:rgba(15,23,42,.14);
-        --nexus-client-field:#ffffff;
-        --nexus-client-summary:rgba(248,250,252,.92);
+        --nexus-client-placeholder:rgba(71,85,105,.72);
         color:var(--nexus-client-text)!important;
       }
       html.nexus-theme-dark #nexusClientCard{
         --nexus-client-text:#f8fafc;
         --nexus-client-muted:#cbd5e1;
         --nexus-client-border:rgba(226,232,240,.18);
-        --nexus-client-field:rgba(15,23,42,.64);
-        --nexus-client-summary:rgba(15,23,42,.48);
+        --nexus-client-placeholder:rgba(203,213,225,.68);
       }
       #nexusClientCard .card-title,
       #nexusClientCard .nexus-client-label,
@@ -33,7 +31,7 @@
       #nexusClientCard .card-kicker,
       #nexusClientCard .nexus-client-muted,
       #nexusClientCard .nexus-client-status{color:var(--nexus-client-muted)!important}
-      #nexusClientCard .nexus-client-summary{margin-top:14px;padding:14px;border:1px solid var(--nexus-client-border);border-radius:16px;background:var(--nexus-client-summary)}
+      #nexusClientCard .nexus-client-summary{margin-top:14px;padding:14px;border:1px solid var(--nexus-client-border);border-radius:16px;background:transparent}
       #nexusClientCard .nexus-client-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;padding:8px 0;border-bottom:1px solid var(--nexus-client-border)}
       #nexusClientCard .nexus-client-row:last-child{border-bottom:0}
       #nexusClientCard .nexus-client-label{font-size:11px;font-weight:800;opacity:.68}
@@ -42,9 +40,10 @@
       #nexusClientCard .nexus-client-field{margin-top:11px}
       #nexusClientCard .nexus-client-field:first-child{margin-top:0}
       #nexusClientCard .nexus-client-field label{display:block;margin-bottom:6px;font-size:11px;font-weight:800;color:var(--nexus-client-text)!important}
-      #nexusClientCard input,#nexusClientCard textarea{width:100%;box-sizing:border-box;border:1px solid var(--nexus-client-border);border-radius:14px;padding:12px 14px;font:inherit;background:var(--nexus-client-field)!important;outline:none}
+      #nexusClientCard input,#nexusClientCard textarea{width:100%;box-sizing:border-box;border:1px solid var(--nexus-client-border);border-radius:14px;padding:12px 14px;font:inherit;background:transparent!important;outline:none;color:var(--nexus-client-text)!important;caret-color:var(--nexus-client-text)}
+      #nexusClientCard input:focus,#nexusClientCard textarea:focus{border-color:rgba(59,130,246,.55);box-shadow:0 0 0 3px rgba(59,130,246,.10)}
       #nexusClientCard textarea{min-height:84px;resize:vertical;line-height:1.55}
-      #nexusClientCard input::placeholder,#nexusClientCard textarea::placeholder{color:var(--nexus-client-muted)!important;opacity:.72}
+      #nexusClientCard input::placeholder,#nexusClientCard textarea::placeholder{color:var(--nexus-client-placeholder)!important;opacity:1}
       #nexusClientCard .nexus-client-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
       #nexusClientCard .nexus-client-edit{width:100%;margin-top:12px}
       #nexusClientCard .nexus-client-cancel{border:1px solid var(--nexus-client-border);background:transparent;color:var(--nexus-client-text);border-radius:14px;font-weight:800}
@@ -85,9 +84,9 @@
 
   function formHtml(profile={}){
     return `<div class="nexus-client-form" id="nexusClientForm">
-      <div class="nexus-client-field"><label for="nexusClientName">会社名</label><input id="nexusClientName" value="${esc(profile.currentClientName||'')}" placeholder="例：楽天グループ株式会社"></div>
-      <div class="nexus-client-field"><label for="nexusClientWork">業務内容</label><textarea id="nexusClientWork" placeholder="例：基地局設置に関する調査・進捗管理">${esc(profile.currentClientWorkDescription||'')}</textarea></div>
-      <div class="nexus-client-field"><label for="nexusClientStation">最寄駅</label><input id="nexusClientStation" value="${esc(profile.currentClientNearestStation||'')}" placeholder="例：二子玉川駅"></div>
+      <div class="nexus-client-field"><label for="nexusClientName">会社名</label><input id="nexusClientName" value="${esc(profile.currentClientName||'')}" placeholder="例：株式会社サンプル"></div>
+      <div class="nexus-client-field"><label for="nexusClientWork">業務内容</label><textarea id="nexusClientWork" placeholder="例：社内システムの運用サポート">${esc(profile.currentClientWorkDescription||'')}</textarea></div>
+      <div class="nexus-client-field"><label for="nexusClientStation">最寄駅</label><input id="nexusClientStation" value="${esc(profile.currentClientNearestStation||'')}" placeholder="例：東京駅"></div>
       <div class="nexus-client-actions"><button type="button" class="nexus-client-cancel" id="nexusClientCancel">キャンセル</button><button type="button" class="submit-btn" id="nexusClientSave">保存する</button></div>
     </div>`;
   }
