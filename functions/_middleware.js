@@ -71,11 +71,20 @@ function injectBeforeBodyEnd(html, scripts) {
   return bodyIndex >= 0 ? html.slice(0, bodyIndex) + scripts.join('') + html.slice(bodyIndex) : html + scripts.join('');
 }
 
-function injectFavicon(html) {
-  if (html.includes('href="/favicon.svg"') || html.includes("href='/favicon.svg'")) return html;
-  const tag = '<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="shortcut icon" href="/favicon.svg">';
+function injectAppLinks(html) {
+  const tags = [];
+  if (!html.includes('href="/favicon.svg"') && !html.includes("href='/favicon.svg'")) {
+    tags.push('<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="shortcut icon" href="/favicon.svg">');
+  }
+  if (!html.includes('rel="manifest"') && !html.includes("rel='manifest'")) {
+    tags.push('<link rel="manifest" href="/manifest.webmanifest">');
+  }
+  if (!html.includes('rel="apple-touch-icon"') && !html.includes("rel='apple-touch-icon'")) {
+    tags.push('<link rel="apple-touch-icon" href="/favicon.svg">');
+  }
+  if (!tags.length) return html;
   const headIndex = html.toLowerCase().indexOf('</head>');
-  return headIndex >= 0 ? html.slice(0, headIndex) + tag + html.slice(headIndex) : tag + html;
+  return headIndex >= 0 ? html.slice(0, headIndex) + tags.join('') + html.slice(headIndex) : tags.join('') + html;
 }
 
 function looksLikeAdminHtml(html) {
@@ -103,7 +112,7 @@ export async function onRequest(context) {
 
   if (!isStaffShell && !isAdminShell) return response;
 
-  html = injectFavicon(html);
+  html = injectAppLinks(html);
 
   const scripts = [];
   if (!html.includes('/nexus-auth-persistence.js')) {
@@ -116,6 +125,7 @@ export async function onRequest(context) {
     if (!html.includes('/nexus-login-cleanup.js')) scripts.push('<script src="/nexus-login-cleanup.js"></script>');
     if (!html.includes('/nexus-login-pc.js')) scripts.push('<script src="/nexus-login-pc.js"></script>');
     if (!html.includes('/nexus-desktop-admin-redirect.js')) scripts.push('<script src="/nexus-desktop-admin-redirect.js"></script>');
+    if (!html.includes('/nexus-ui-dedupe.js')) scripts.push('<script src="/nexus-ui-dedupe.js"></script>');
     if (!html.includes('/nexus-staff-profile.js')) scripts.push('<script src="/nexus-staff-profile.js"></script>');
     if (!html.includes('/nexus-staff-client-workplace.js')) scripts.push('<script src="/nexus-staff-client-workplace.js"></script>');
     if (!html.includes('/nexus-staff-runtime.js')) scripts.push('<script src="/nexus-staff-runtime.js"></script>');
@@ -132,6 +142,7 @@ export async function onRequest(context) {
     }
     if (!html.includes('/nexus-admin-auth.js')) scripts.push('<script src="/nexus-admin-auth.js"></script>');
     if (!html.includes('/nexus-admin-runtime.js')) scripts.push('<script src="/nexus-admin-runtime.js"></script>');
+    if (!html.includes('/nexus-admin-modal-guard.js')) scripts.push('<script src="/nexus-admin-modal-guard.js"></script>');
     if (!html.includes('/nexus-admin-actions.js')) scripts.push('<script src="/nexus-admin-actions.js"></script>');
     if (!html.includes('/nexus-admin-ui-tweaks.js')) scripts.push('<script src="/nexus-admin-ui-tweaks.js"></script>');
   }
